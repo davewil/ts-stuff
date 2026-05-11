@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+
+# Local agent/workspace state
+.omc/
+.remember/
+.nwave/
+.claude/
+
+# OS
+.DS_Store
