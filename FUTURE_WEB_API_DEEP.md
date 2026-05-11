@@ -97,6 +97,98 @@ Three principles that fall out of this:
 - `fast-json-stringify` only kicks in if you declare a response schema. Skip the schema and you fall back to `JSON.stringify` and lose half the speed advantage. *Schema-or-pay* is the deal.
 ─────────────────────────────────────────────────
 
+### Route organization — Action-Domain-Responder (ADR)
+
+The framework picks above answer *what* runs each request; ADR (Paul M. Jones, 2014 — not to be confused with Architecture Decision Records) answers *how each request's code is organized*. It's a refinement of MVC for HTTP-specific contexts, with three rules:
+
+1. **One Action per request type** — not a controller class with many methods. Each endpoint is its own file with its own input/output shape.
+2. **The Domain is transport-agnostic** — no `FastifyRequest` / `FastifyReply` imports, no HTTP concepts. The Domain is callable from a test, a queue worker, or another transport without modification.
+3. **The Responder formats output** — success serialization, error shape, status codes. Knows about HTTP; doesn't know about business rules.
+
+The pattern falls out of this stack naturally — three things make that true:
+
+- **Fastify routes are already action-shaped.** A route registration *is* an Action: it declares input/output schemas and a handler. There's no "controller class with five methods" antipattern to escape from.
+- **The §3 request-context spine makes Domain genuinely transport-free.** Domain code reads `ctx().tenantId` instead of receiving `req` as a parameter. This is the load-bearing piece — most stacks claim transport-free domains but quietly thread `req` everywhere because the alternative hurts.
+- **Schema-driven serialization (`fast-json-stringify`) + `setErrorHandler` *are* the Responder.** For most routes, the response Zod schema is the entire output contract. Explicit Responder code is only needed for atypical responses (302, multi-shape 200/201/202, file streams).
+
+#### The shape — `defineAction` as a thin helper
+
+`@org/server` can surface ADR as a first-class helper without imposing classes:
+
+```ts
+// in @org/server/define-action.ts
+export const defineAction = <TIn, TOut>(spec: {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  url: string;
+  schemas: {
+    body?: z.ZodType<TIn>;
+    params?: z.ZodType<unknown>;
+    querystring?: z.ZodType<unknown>;
+    response: Record<number, z.ZodType<unknown>>;
+  };
+  // Domain: pure, transport-free. No FastifyRequest in scope.
+  // Reads ctx() (§3) for tenantId/userId/requestId.
+  domain: (input: TIn) => Promise<Result<TOut, DomainError>>;
+  // Responder: optional override. Defaults to:
+  //   Ok  → status 2xx with response-schema-shaped body
+  //   Err → setErrorHandler converts to problem+json
+  responder?: (result: Result<TOut, DomainError>, reply: FastifyReply) => unknown;
+  // Optional declarative metadata that platform plugins consume:
+  requires?: { scopes?: string[]; flags?: string[]; auditEvent?: string };
+}) => spec;
+```
+
+A typical route file collapses to three named functions:
+
+```ts
+// src/routes/invoices/create.ts
+import { defineAction } from '@org/server';
+import { CreateInvoiceRequest, InvoiceResponse } from '@org/contracts';
+import { invoicesService } from '../../domain/invoices';
+
+export const createInvoice = defineAction({
+  method: 'POST',
+  url: '/v1/invoices',
+  schemas: {
+    body: CreateInvoiceRequest,
+    response: { 201: InvoiceResponse },
+  },
+  requires: { scopes: ['invoices:write'], auditEvent: 'invoice.created' },
+  domain: async (input) => invoicesService.create(input),
+  // No responder → schema-driven 201 on Ok, problem+json on Err
+});
+```
+
+The `requires` field is a small but important addition: declarative metadata the platform plugins read at route registration. The auth plugin enforces `scopes`; the audit plugin reads `auditEvent` and emits the typed row in `onResponse`. Cross-cutting concerns that don't fit a hook (because they're per-action, not per-request) get a declarative seam rather than imperative handler code.
+
+#### Boundaries ADR earns and where to stop
+
+What it gives you that a bare route handler doesn't:
+
+- **Greppability.** `createInvoice` is a named symbol; `app.post('/v1/invoices', async (req, reply) => {...})` is not. In a 300-endpoint codebase, this matters for navigation, code review, and LLM-assistant precision.
+- **Domain is unit-testable without Fastify.** `invoicesService.create(input)` runs in vitest with no app instance, no `inject()`, no mock reply. This is already possible without ADR; ADR is what makes it the *only* shape.
+- **A declarative spot for per-action cross-cutting.** `requires.scopes`, `requires.flags`, `requires.auditEvent` — the platform reads these at registration time and wires them in. The handler body stays at "call domain, return".
+
+What to *not* do in the name of ADR purity:
+
+- **Don't introduce classes per Action just because the 2014 paper used PHP classes.** A `defineAction({ ... })` object has the same separation with less ceremony. Classes only earn their keep if you have shared protected helpers, which is rare for HTTP actions.
+- **Don't write a Responder for every action.** For 95% of routes, the response Zod schema *is* the Responder — `fast-json-stringify` serializes Ok and `setErrorHandler` formats Err. Only override `responder` when the action genuinely has multi-shape output (302 + 200 conditionally, file download with Content-Disposition, SSE stream, etc.).
+- **Don't try to make Domain depend on Fastify "just for logging".** Domain uses the `@org/observability` logger which reads `ctx()` internally — no transport coupling. Same for tenancy, audit, OTel.
+
+#### Enforcement — ESLint, not vigilance
+
+The discipline only holds if it's enforced mechanically. Add to `@org/eslint-config`:
+
+- `no-restricted-imports` in `src/domain/**` — forbid `fastify`, `@fastify/*`, `FastifyRequest`, `FastifyReply` symbols. Domain code that imports any of these is a layering violation.
+- `no-restricted-syntax` in route files — forbid `req.headers` access outside hooks (already in the doc's existing lint set). Reinforces "handlers read ctx(), nothing else".
+- A custom rule (`@org/eslint-plugin-platform/define-action-required`) — every file under `src/routes/**` must export at least one `defineAction(...)` call. Prevents the slow drift back to imperative `app.post(...)` handlers.
+
+★ Insight ─────────────────────────────────────
+- ADR's deepest payoff in *this* stack isn't separation-of-concerns hygiene — it's that the `requires` declarative metadata becomes a single place to express per-action cross-cutting (auth scopes, feature flags, audit event names, rate-limit overrides). Without ADR, those expressions scatter into the handler body or into route-registration boilerplate, both of which are bad places.
+- For LLM-assistant codegen (see §10.5), `defineAction` is a stronger grammar than a free-form route handler — fewer degrees of freedom means more predictable generation. Pair with the `@org/contracts` Zod schemas and the assistant has almost no room to invent its own conventions.
+- The pattern is *strictly stronger* in a Fastify+Zod stack than it was in the original PHP context: Zod gives compile-time type flow from `schemas.body` through `domain(input)` to `schemas.response`, which ADR's original framing couldn't enforce.
+─────────────────────────────────────────────────
+
 ---
 
 ## 2. Authentication & Authorization
@@ -377,9 +469,9 @@ Audit logs and observability logs are *different things*. Mixing them costs you 
 ```ts
 const AuditEvent = z.object({
   schemaVersion: z.literal(1),
-  eventId: z.string().ulid(),
-  occurredAt: z.string().datetime(),
-  tenantId: z.string().uuid(),
+  eventId: z.ulid(),
+  occurredAt: z.iso.datetime(),
+  tenantId: z.uuid(),
   actor: z.object({
     type: z.enum(['user', 'api_key', 'service', 'system']),
     id: z.string(),
@@ -641,13 +733,19 @@ Re-evaluate Bun-as-prod yearly.
 
 ## 9. Putting it together — the hook chain in code
 
-Skeleton of `app.ts` showing how the per-request concerns wire up. Each plugin is a separate file in real life.
+This is the **internals of `@org/server`'s `buildApp()` factory**, not what a service team writes. A service team's entire entry point is a five-line `main.ts` that calls `buildApp({ serviceName, routes })` — see §10.1 for the consumer view. The wiring below lives once, inside the platform package, and is what every service inherits by depending on `@org/server`.
+
+Reading it this way makes the §10 framing concrete: each `app.register(xPlugin)` line here is a single decision the platform team made on behalf of every service — and the equivalent code that *isn't* in any service repo because the platform owns it.
+
+Skeleton of `@org/server/src/build-app.ts` showing how the per-request concerns wire up. Each plugin is a separate file in the platform package (`@org/server/src/plugins/*`).
 
 ```ts
+// @org/server/src/build-app.ts — runs once, ships in the npm package
 import Fastify from 'fastify';
 import { fastifyRequestContext } from '@fastify/request-context';
+import type { BuildAppOptions } from './types';
 
-export async function buildApp() {
+export async function buildApp({ serviceName, serviceVersion, routes }: BuildAppOptions) {
   const app = Fastify({
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? ulid(),
@@ -700,7 +798,9 @@ Two ordering subtleties that the upstream docs make explicit:
 - **`setErrorHandler` vs `onError`** — `onError` *cannot* change the error and `reply.send()` inside it throws. Use `setErrorHandler` to *shape* the response (problem+json, status code mapping); use `onError` only for telemetry side-effects (OTel `recordException`, audit-of-errors emit).
 - **`preClose` vs `onClose`** — `preClose` runs while in-flight requests are still draining (the server already returns 503 for *new* requests). That's the correct window for any work that still needs the DB pool open — e.g. draining a Tier-2 shipper or Tier-3 outbox dispatcher (§5). For a Tier-1 audit setup the hook is just a no-op. `onClose` runs *after* the HTTP server has stopped — use it only for releasing infrastructure (pools, Kafka producers). `onClose` is also the only hook that's *not* encapsulated, so it always runs at the root scope regardless of where it was registered.
 
-Read top-to-bottom, this *is* the architecture: every cross-cutting concern is one named plugin, registered in the order it should fire. New developers find a single file and understand the request lifecycle in five minutes. That's the payoff.
+Read top-to-bottom, this *is* the architecture: every cross-cutting concern is one named plugin, registered in the order it should fire. New developers find a single file in the platform package and understand the request lifecycle in five minutes. That's the payoff — but only the platform-team developer ever opens this file. The service-team developer's equivalent file is §10.1's five-line `main.ts`: `await buildApp({ serviceName, routes }).listen(...)`. The wiring above is the *contract* they inherit by depending on `@org/server`, not code they author or maintain.
+
+If a service team ever finds itself reaching into `@org/server` internals to override one of these plugins, that's the signal — either the platform needs a new option on `buildApp` (raise it as an inner-source PR, §10.4), or the service has a requirement that genuinely belongs in `@org/server` for everyone. Forking the wiring locally is the anti-pattern.
 
 ---
 
@@ -721,7 +821,8 @@ A single internal monorepo, published to a private registry (GitHub Packages, JF
 @org/server         ── Fastify app factory: ALL hooks pre-wired
                        buildApp() returns a configured Fastify with auth,
                        tenancy, RLS, audit, OTel, Pino, error shape, etc.
-                       Exposes only: route registration + Zod schemas.
+                       Exposes defineAction({ schemas, domain, requires })
+                       as the ADR-shaped route primitive (see §1).
 @org/auth           ── JWT mint/verify, JWKS cache, capability tokens,
                        WorkOS/Clerk adapters, API-key hashing+lookup,
                        webhook HMAC helpers (Stripe/GitHub/etc).
@@ -828,7 +929,7 @@ The discipline that makes this work without a flag-day migration is **Parallel C
 ```ts
 // Phase 1 — expand. Both shapes valid in the same package version.
 export const Invoice = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   amount: z.number(),                       // existing
   amountMinorUnits: z.bigint().optional(),  // new, additive
 });
@@ -838,7 +939,7 @@ export const InvoiceAmount = Invoice.shape.amount;
 
 // Phase 3 — contract. After every consumer is migrated.
 export const Invoice = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   amountMinorUnits: z.bigint(),             // now required, old shape gone
 });
 ```
@@ -872,8 +973,9 @@ The honest bottom line: **for an internal, all-TS, monorepo'd, single-version pl
 Once the platform package is the de-facto vocabulary, an LLM coding assistant (Claude Code, Cursor, Copilot, Codex) can be steered toward it cheaply:
 
 - Bundle `@org/server`'s README + a representative service's source into the assistant's context (CLAUDE.md / `.cursor/rules/` / project knowledge).
-- Add ESLint rules that fail PRs introducing forbidden patterns (`console.log`, raw `fetch`, `req.headers['x-tenant-id']`). The lint output is the assistant's feedback signal.
-- Add a `pnpm exec @org/lint-architecture` check that asserts `main.ts` calls `buildApp` and nothing else cross-cutting.
+- Add ESLint rules that fail PRs introducing forbidden patterns (`console.log`, raw `fetch`, `req.headers['x-tenant-id']`, `fastify` imports under `src/domain/**`). The lint output is the assistant's feedback signal.
+- Add a `pnpm exec @org/lint-architecture` check that asserts `main.ts` calls `buildApp` and nothing else cross-cutting, and that every file under `src/routes/**` exports a `defineAction(...)` call.
+- The ADR shape (§1) is the strongest grammar lever — `defineAction` collapses route code to three named parts (schemas / domain / requires), removing most of the degrees of freedom where assistants invent bespoke patterns. With this shape plus typed `@org/contracts` schemas, an assistant generating a new endpoint has roughly one correct answer.
 
 This is how an enterprise gets *consistency at agent-generated scale*: the assistant produces code that looks like the platform package, because the platform package is what's in its context and what the lint rules enforce. Without this grammar, agent-written code drifts from the architecture within weeks.
 
