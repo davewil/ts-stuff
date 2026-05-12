@@ -1,5 +1,7 @@
 # Future Stack Options
 
+> **About this document.** Exploratory technical thinking — *how I'd reason about this stack from the outside*, not a committed architecture. Picks are opinionated and specific because vague picks aren't useful, but each one is a defensible choice among alternatives, not a corporate mandate. Read it as "here's a coherent set of decisions and why" — happy to argue any of them.
+
 A landscape survey across the layers needed for a multi-tenant, regulated, high-throughput agent platform — with a synthesized recommendation at the end. Scope: Node / Bun / Deno runtimes. Time horizon: stack choices for a Python/FastAPI → Node/TS evolution.
 
 ---
@@ -299,7 +301,7 @@ Aimed at: multi-tenant, regulated, high-throughput agent workloads with LLM + vi
 ### Recommended stack
 
 **Runtime & language**
-- Node 22 LTS, TypeScript 5.x strict.
+- Node 24 LTS (Active LTS since Oct 2025), TypeScript 5.x strict. Re-evaluate on each LTS transition; Node 22 is still Maintenance LTS through Apr 2027 if existing services need to stay.
 - `tsx` for dev, `tsup` / `esbuild` for build.
 - Bun OK for local dev / scripts / tests; not production for regulated org yet.
 - Deno: out for now.

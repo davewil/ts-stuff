@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stack Decisions — Ledger</title>
+<style>
+  :root {
+    /* Rose Pine (Main) palette */
+    --rp-base:    #191724;
+    --rp-surface: #1f1d2e;
+    --rp-overlay: #26233a;
+    --rp-muted:   #6e6a86;
+    --rp-subtle:  #908caa;
+    --rp-text:    #e0def4;
+    --rp-love:    #eb6f92;
+    --rp-gold:    #f6c177;
+    --rp-rose:    #ebbcba;
+    --rp-pine:    #31748f;
+    --rp-foam:    #9ccfd8;
+    --rp-iris:    #c4a7e7;
+    --rp-hl-low:  #21202e;
+    --rp-hl-med:  #403d52;
+    --rp-hl-high: #524f67;
+
+    /* Semantic aliases */
+    --bg:              var(--rp-base);
+    --surface:         var(--rp-surface);
+    --ink:             var(--rp-text);
+    --ink-2:           var(--rp-subtle);
+    --ink-3:           var(--rp-muted);
+    --rule:            var(--rp-hl-med);
+    --accent:          var(--rp-iris);
+    --accent-soft:     rgba(196, 167, 231, 0.12);
+    --warn:            var(--rp-love);
+    --warn-soft:       rgba(235, 111, 146, 0.08);
+    --convention:      var(--rp-foam);
+    --convention-soft: rgba(156, 207, 216, 0.10);
+    --code-bg:         var(--rp-hl-low);
+    --code-ink:        var(--rp-rose);
+    --tag-bg:          var(--rp-overlay);
+    --tag-ink:         var(--rp-subtle);
+
+    --mono: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Mono", Menlo, Monaco, Consolas, monospace;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv01", "cv09", "calt", "liga";
+    /* Subtle iris haze at top */
+    background-image:
+      radial-gradient(ellipse 1200px 600px at 50% -200px, rgba(196, 167, 231, 0.07), transparent 70%),
+      radial-gradient(ellipse 800px 400px at 100% 10%, rgba(156, 207, 216, 0.04), transparent 60%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  ::selection {
+    background: rgba(235, 188, 186, 0.25);
+    color: var(--rp-text);
+  }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--rp-hl-med);
+    border-radius: 5px;
+    border: 2px solid var(--rp-base);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--rp-hl-high); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 4rem;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 3.5rem 2.5rem;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; gap: 2rem; padding: 2rem 1.25rem; }
+    nav.toc {
+      position: static !important;
+      max-height: none !important;
+      border-right: none !important;
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 1.5rem;
+      padding-right: 0 !important;
+    }
+  }
+
+  /* Sidebar TOC */
+  nav.toc {
+    position: sticky;
+    top: 2.5rem;
+    max-height: calc(100vh - 5rem);
+    overflow-y: auto;
+    font-size: 0.83rem;
+    padding-right: 1.5rem;
+    border-right: 1px solid var(--rule);
+  }
+  nav.toc h2 {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--rp-gold);
+    margin: 0 0 1rem;
+  }
+  nav.toc ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: toc;
+  }
+  nav.toc li { margin: 0; counter-increment: toc; }
+  nav.toc a {
+    color: var(--ink-2);
+    text-decoration: none;
+    display: block;
+    padding: 0.34rem 0.75rem;
+    border-left: 2px solid transparent;
+    border-radius: 0 4px 4px 0;
+    transition: all 0.15s ease;
+    font-weight: 400;
+  }
+  nav.toc a:hover {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  nav.toc a::before {
+    content: counter(toc, decimal-leading-zero) "  ";
+    color: var(--rp-muted);
+    font-family: var(--mono);
+    font-size: 0.78em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  main { min-width: 0; }
+
+  /* Header */
+  header.doc-header {
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--rule);
+    position: relative;
+  }
+  header.doc-header::after {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 64px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--rp-iris), var(--rp-rose));
+  }
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: -0.028em;
+    margin: 0 0 0.65rem;
+    line-height: 1.1;
+    background: linear-gradient(135deg, var(--rp-text) 0%, var(--rp-iris) 70%, var(--rp-rose) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+  }
+  .subtitle {
+    color: var(--ink-2);
+    font-size: 1.05rem;
+    margin: 0;
+    font-weight: 400;
+    max-width: 60ch;
+  }
+  .meta {
+    margin-top: 1.25rem;
+    font-size: 0.82rem;
+    color: var(--rp-muted);
+    font-family: var(--mono);
+    letter-spacing: 0.01em;
+  }
+  .meta strong {
+    color: var(--rp-gold);
+    font-weight: 500;
+    font-family: var(--sans);
+  }
+
+  /* Callout */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 1.25rem 1.5rem;
+    margin: 2rem 0;
+    font-size: 0.95rem;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.2),
+      0 8px 24px -8px rgba(196, 167, 231, 0.08);
+    position: relative;
+  }
+  .callout p { margin: 0.6rem 0; color: var(--ink-2); }
+  .callout p:first-of-type { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout p strong { color: var(--rp-text); }
+  .callout-title {
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.85rem;
+  }
+
+  /* Key */
+  .key {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1.25rem 1.5rem;
+    margin: 2rem 0;
+    font-size: 0.92rem;
+  }
+  .key-title {
+    font-weight: 700;
+    color: var(--rp-gold);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.85rem;
+  }
+  .key ul { margin: 0; padding-left: 1.4rem; }
+  .key li { margin: 0.45rem 0; color: var(--ink-2); }
+  .key li strong { color: var(--rp-text); }
+
+  /* Sections */
+  section.cat {
+    margin: 3rem 0;
+    scroll-margin-top: 2rem;
+  }
+  section.cat h2 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+    margin: 0 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--rule);
+    color: var(--rp-text);
+    position: relative;
+  }
+  section.cat h2::before {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 32px;
+    height: 1px;
+    background: var(--accent);
+  }
+  section.cat h2 .anchor {
+    color: var(--rp-muted);
+    text-decoration: none;
+    margin-right: 0.5rem;
+    font-weight: 400;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+    font-family: var(--mono);
+    border-bottom: none;
+  }
+  section.cat:hover h2 .anchor { opacity: 0.7; }
+  section.cat h2 .anchor:hover { opacity: 1; color: var(--accent); }
+
+  /* Bullet lists */
+  ul.picks {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+  }
+  ul.picks > li {
+    padding: 0.5rem 0;
+    line-height: 1.65;
+    color: var(--ink-2);
+  }
+  ul.picks li::before {
+    content: "▸";
+    color: var(--rp-rose);
+    margin-right: 0.6rem;
+    font-size: 0.9em;
+    opacity: 0.75;
+  }
+  ul.picks ul {
+    list-style: none;
+    padding-left: 1.75rem;
+    margin: 0.5rem 0 0.6rem;
+  }
+  ul.picks ul li {
+    padding: 0.25rem 0;
+    color: var(--rp-muted);
+    font-size: 0.93em;
+  }
+  ul.picks ul li::before {
+    content: "—";
+    color: var(--rp-muted);
+    opacity: 0.6;
+  }
+  ul.picks li strong {
+    color: var(--rp-text);
+    font-weight: 600;
+  }
+
+  /* Tags */
+  .tag {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.18rem 0.6rem;
+    border-radius: 3px;
+    margin-right: 0.5rem;
+    vertical-align: 1px;
+    font-family: var(--sans);
+  }
+  .tag-conv {
+    background: var(--convention-soft);
+    color: var(--convention);
+    border: 1px solid rgba(156, 207, 216, 0.25);
+  }
+  .tag-anti {
+    background: var(--warn-soft);
+    color: var(--warn);
+    border: 1px solid rgba(235, 111, 146, 0.25);
+  }
+
+  /* Anti-picks section */
+  section.cat.anti h2 {
+    border-bottom-color: rgba(235, 111, 146, 0.2);
+  }
+  section.cat.anti h2::before {
+    background: var(--rp-love);
+  }
+  section.cat.anti ul.picks > li {
+    background: linear-gradient(to right, rgba(235, 111, 146, 0.06), transparent 70%);
+    padding-left: 0.85rem;
+    border-left: 2px solid rgba(235, 111, 146, 0.4);
+    margin-bottom: 0.3rem;
+    border-radius: 0 4px 4px 0;
+  }
+  section.cat.anti ul.picks > li::before {
+    content: "✕";
+    color: var(--rp-love);
+    opacity: 0.85;
+  }
+
+  /* Code */
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0.14rem 0.42rem;
+    border-radius: 4px;
+    border: 1px solid rgba(64, 61, 82, 0.6);
+    font-feature-settings: "calt", "liga";
+  }
+  strong code, h2 code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--rp-rose);
+    font-size: 0.9em;
+  }
+  em code { font-style: normal; }
+
+  /* Links */
+  a {
+    color: var(--rp-foam);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(156, 207, 216, 0.3);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  a:hover {
+    color: var(--rp-iris);
+    border-bottom-color: var(--rp-iris);
+  }
+
+  /* Footer */
+  footer.usage {
+    margin-top: 4.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--rule);
+    position: relative;
+  }
+  footer.usage::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 64px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--rp-rose), var(--rp-iris));
+  }
+  footer.usage h2 {
+    font-size: 1.2rem;
+    color: var(--rp-gold);
+    margin: 0 0 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  footer.usage ul.picks li strong::after {
+    content: " — ";
+    color: var(--rp-muted);
+    font-weight: 400;
+  }
+
+  /* Print — soft, readable, ink-aware */
+  @media print {
+    body {
+      background: white;
+      color: #1a1a1a;
+      background-image: none;
+    }
+    .layout { grid-template-columns: 1fr; padding: 0; max-width: none; }
+    nav.toc { display: none; }
+    section.cat { break-inside: avoid; }
+    h1 {
+      -webkit-text-fill-color: #1a1a1a;
+      color: #1a1a1a;
+      background: none;
+    }
+    a, code {
+      color: #1a1a1a;
+      background: transparent;
+      border: none;
+    }
+    code { font-weight: 600; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <nav class="toc" aria-label="Table of contents">
+    <h2>Categories</h2>
+    <ol>
+      <li><a href="#runtime">Runtime &amp; build</a></li>
+      <li><a href="#web">Web framework</a></li>
+      <li><a href="#validation">Validation &amp; schemas</a></li>
+      <li><a href="#auth">Authentication &amp; authz</a></li>
+      <li><a href="#tenancy">Multi-tenancy &amp; context</a></li>
+      <li><a href="#data">Data layer</a></li>
+      <li><a href="#messaging">Messaging</a></li>
+      <li><a href="#workflows">Async workflows</a></li>
+      <li><a href="#audit">Audit logging</a></li>
+      <li><a href="#logging">Structured logging</a></li>
+      <li><a href="#observability">Observability</a></li>
+      <li><a href="#llm">LLM / agent layer</a></li>
+      <li><a href="#http">Outbound HTTP</a></li>
+      <li><a href="#testing">Testing</a></li>
+      <li><a href="#isolation">Tenant isolation patterns</a></li>
+      <li><a href="#platform">Platform package shape</a></li>
+      <li><a href="#monorepo">Monorepo &amp; release</a></li>
+      <li><a href="#secrets">Auth / secrets infra</a></li>
+      <li><a href="#anti">Anti-picks</a></li>
+      <li><a href="#verify">Verify before committing</a></li>
+      <li><a href="#usage">How to use this file</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc-header">
+      <h1>Stack Decisions — Ledger</h1>
+      <p class="subtitle">A scannable reference for the technical choices in the regulated-multi-tenant agent-platform stack.</p>
+      <p class="meta"><strong>Last reviewed:</strong> 2026-05-11. Re-review on major Node LTS transitions, major Fastify/Zod releases, or yearly platform-package review.</p>
+    </header>
+
+    <div class="callout">
+      <div class="callout-title">About this document</div>
+      <p>Exploratory technical thinking, not a committed architecture. Picks are specific and opinionated because vague picks aren't useful for discussion — but each is a defensible choice among real alternatives, and happy to argue any of them. The categories and reasoning matter more than the exact packages.</p>
+      <p>Companion to <a href="FUTURE_STACK_OPTIONS.md">FUTURE_STACK_OPTIONS.md</a> (parent ecosystem survey) and <a href="FUTURE_WEB_API_DEEP.md">FUTURE_WEB_API_DEEP.md</a> (Web/API deep-dive: Fastify, auth, tenancy, audit, observability, contracts, async workflows).</p>
+      <p><strong>Read this as the <em>what</em>; read the linked docs for the <em>why</em>.</strong></p>
+    </div>
+
+    <div class="key">
+      <div class="key-title">Conventions used in this ledger</div>
+      <ul>
+        <li><strong>Package picks</strong> — specific npm packages the stack installs.</li>
+        <li><span class="tag tag-conv">Convention</span> — patterns enforced by lint rules, ADRs, or the platform package; not something you install.</li>
+        <li><span class="tag tag-anti">Anti-pick</span> — explicitly ruled out, with brief reason.</li>
+      </ul>
+    </div>
+
+    <section class="cat" id="runtime">
+      <h2><a class="anchor" href="#runtime">#</a>Runtime &amp; build</h2>
+      <ul class="picks">
+        <li><strong>Runtime:</strong> Node 24 LTS (Active LTS since Oct 2025) — <code>node@24</code>
+          <ul><li>Node 22 still in Maintenance LTS through Apr 2027; fine for existing services until next planned upgrade.</li></ul>
+        </li>
+        <li><strong>Language:</strong> TypeScript strict — <code>typescript</code></li>
+        <li><strong>Dev runner:</strong> <code>tsx</code></li>
+        <li><strong>Bundler:</strong> <code>tsup</code> or <code>esbuild</code></li>
+        <li><span class="tag tag-conv">Convention</span><strong>TS config:</strong> <code>strict</code>, <code>noUncheckedIndexedAccess</code>, <code>exactOptionalPropertyTypes</code></li>
+        <li><strong>Bun:</strong> dev/test only; not production for regulated org yet. Re-evaluate yearly.</li>
+        <li><strong>Deno:</strong> out of scope.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="web">
+      <h2><a class="anchor" href="#web">#</a>Web framework</h2>
+      <ul class="picks">
+        <li><strong>HTTP framework:</strong> Fastify — <code>fastify</code></li>
+        <li><strong>Edge runtime</strong> (small slice, not paved road): Hono — <code>hono</code></li>
+        <li><span class="tag tag-conv">Convention</span><strong>Route shape:</strong> Action-Domain-Responder via <code>@org/server</code>'s <code>defineAction({ schemas, domain, requires })</code> helper</li>
+        <li><strong>Fastify plugin set:</strong>
+          <ul>
+            <li><code>@fastify/sensible</code> — problem+json, <code>httpErrors</code>, <code>assert</code></li>
+            <li><code>@fastify/helmet</code> — security headers</li>
+            <li><code>@fastify/cors</code></li>
+            <li><code>@fastify/cookie</code>, <code>@fastify/session</code></li>
+            <li><code>@fastify/rate-limit</code> — Redis-backed</li>
+            <li><code>@fastify/compress</code> — Brotli/gzip; skip for streams</li>
+            <li><code>@fastify/multipart</code></li>
+            <li><code>@fastify/under-pressure</code> — load shedding</li>
+            <li><code>@fastify/circuit-breaker</code> (or <code>opossum</code> directly)</li>
+            <li><code>@fastify/swagger</code>, <code>@fastify/swagger-ui</code></li>
+            <li><code>@fastify/request-context</code> — <code>AsyncLocalStorage</code> wrapper</li>
+            <li><code>@fastify/jwt</code> (or roll OIDC explicitly via <code>jose</code>)</li>
+            <li><code>@fastify/etag</code>, <code>@fastify/caching</code></li>
+            <li><code>fastify-graceful-shutdown</code></li>
+          </ul>
+        </li>
+        <li><span class="tag tag-anti">Anti-pick</span>Express, NestJS, Koa, Hapi, Express 5 — Fastify's hook taxonomy, schema-driven serialization, and Zod/Pino integration are decisive.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="validation">
+      <h2><a class="anchor" href="#validation">#</a>Validation &amp; schemas</h2>
+      <ul class="picks">
+        <li><strong>Schema lib (universal):</strong> Zod 4 — <code>zod</code> (top-level <code>z.email()</code> / <code>z.uuid()</code> / <code>z.iso.datetime()</code> form; method-chained <code>z.string().email()</code> deprecated)</li>
+        <li><strong>Fastify type provider:</strong> <code>@fastify/type-provider-zod</code></li>
+        <li><strong>Error customization (Zod 4):</strong> <code>{ error: "..." }</code> (not <code>{ message: "..." }</code>)</li>
+        <li><span class="tag tag-anti">Anti-pick</span>TypeBox-only, io-ts, Joi, Yup, Ajv-hand-rolled — Zod gives compile-time + runtime safety from one declaration.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="auth">
+      <h2><a class="anchor" href="#auth">#</a>Authentication &amp; authorization</h2>
+      <ul class="picks">
+        <li><strong>End-user SSO / SAML / SCIM:</strong> WorkOS — <code>@workos-inc/node</code>, <em>or</em> Clerk — <code>@clerk/backend</code>
+          <ul><li>WorkOS for IT-buyer / self-serve IdP setup; Clerk for developer-led / built-in user UI.</li></ul>
+        </li>
+        <li><strong>JWT verify:</strong> <code>jose</code> with cached JWKS</li>
+        <li><strong>Session token mint:</strong> KMS-signed internally; opaque refresh tokens in Redis</li>
+        <li><strong>API-key hashing:</strong> <code>argon2</code> (preferred) or <code>bcrypt</code></li>
+        <li><strong>Service-to-service:</strong> Istio or Linkerd mesh (mTLS + SPIFFE); fallback to short-TTL KMS-signed JWTs</li>
+        <li><strong>Webhook HMAC:</strong> vendor SDKs (<code>stripe.webhooks.constructEvent</code> etc.) + raw-body capture</li>
+        <li><strong>Fine-grained authz</strong> (when needed): OpenFGA — <code>@openfga/sdk</code>, <em>or</em> Cerbos — <code>@cerbos/grpc</code></li>
+        <li><span class="tag tag-conv">Convention</span>Never propagate the IdP's JWT downstream — wrap it at the edge into your own short-lived JWT.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="tenancy">
+      <h2><a class="anchor" href="#tenancy">#</a>Multi-tenancy &amp; request context</h2>
+      <ul class="picks">
+        <li><strong>Async context:</strong> <code>node:async_hooks</code> (<code>AsyncLocalStorage</code>) via <code>@fastify/request-context</code></li>
+        <li><strong>Request ID:</strong> ULID via <code>ulid</code></li>
+        <li><strong>Trace context:</strong> W3C <code>traceparent</code> header (OTel-managed)</li>
+        <li><span class="tag tag-conv">Convention</span><strong>Tenant enforcement:</strong> layered — Postgres RLS + connection wrapper <code>SET LOCAL app.tenant_id</code> + Drizzle query predicate (belt-and-braces)</li>
+        <li><strong>Idempotency:</strong> Stripe pattern, Redis-backed (<code>ioredis</code>), keyed per-tenant</li>
+        <li><strong>Per-tenant rate limit:</strong> <code>@fastify/rate-limit</code> + Redis store, key = <code>${tenantId}:${routeBucket}</code>; LLM endpoints add a token-cost bucket</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="data">
+      <h2><a class="anchor" href="#data">#</a>Data layer</h2>
+      <ul class="picks">
+        <li><strong>Postgres driver:</strong> <code>postgres</code> (porsager) — tagged-template, SQL-injection-safe</li>
+        <li><strong>ORM:</strong> Drizzle — <code>drizzle-orm</code> + <code>drizzle-kit</code></li>
+        <li><strong>Edge Postgres:</strong> <code>@neondatabase/serverless</code></li>
+        <li><strong>Cache / online state:</strong> Redis via <code>ioredis</code></li>
+        <li><strong>In-process jobs:</strong> BullMQ — <code>bullmq</code></li>
+        <li><strong>Vector</strong> (default): <code>pgvector</code> Postgres extension via Drizzle integration; escalate to Qdrant Cloud at scale</li>
+        <li><strong>Fast inner-loop tests:</strong> PGlite — <code>@electric-sql/pglite</code></li>
+        <li><span class="tag tag-anti">Anti-pick</span>Knex, Sequelize, TypeORM, <code>node-postgres</code> (<code>pg</code>) for new code.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="messaging">
+      <h2><a class="anchor" href="#messaging">#</a>Messaging</h2>
+      <ul class="picks">
+        <li><strong>Cloud-native primary:</strong> SQS via <code>@aws-sdk/client-sqs</code> + <code>sqs-consumer</code></li>
+        <li><strong>Kafka</strong> (high-throughput agent fan-out): <code>@confluentinc/kafka-javascript</code> (KIP-848-capable)</li>
+        <li><strong>Edge enqueue:</strong> Cloudflare Queues / Upstash QStash (HTTPS — no specific npm package)</li>
+        <li><strong>Schema registry</strong> (only at language boundaries): Confluent / Apicurio / AWS Glue</li>
+        <li><span class="tag tag-anti">Anti-pick</span>Apache Pulsar (weak JS story), <code>node-rdkafka</code> (superseded), AMQP from edge runtimes.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="workflows">
+      <h2><a class="anchor" href="#workflows">#</a>Async workflows</h2>
+      <ul class="picks">
+        <li><strong>Default:</strong> queue + idempotent consumer + DLQ + idempotency keys</li>
+        <li><strong>Step up:</strong> saga <em>table</em> (custom; pattern in <code>@org/workflow</code> sub-package)</li>
+        <li><strong>Workflow engine when justified:</strong> Temporal — <code>@temporalio/client</code>, <code>@temporalio/worker</code>; Inngest — <code>inngest</code>; AWS Step Functions</li>
+        <li><strong>Durable-execution-as-runtime watch list:</strong> Restate, DBOS, Cloudflare Durable Objects + Workflows</li>
+        <li><span class="tag tag-conv">Convention</span><strong>In-flight schema evolution:</strong> <code>EventEnvelope</code> (<code>{ schemaVersion, payload }</code>) + in-process upcasters defined in <code>@org/contracts</code></li>
+      </ul>
+    </section>
+
+    <section class="cat" id="audit">
+      <h2><a class="anchor" href="#audit">#</a>Audit logging</h2>
+      <ul class="picks">
+        <li><strong>Tier 1 (default):</strong> <code>audit_events</code> table written in the request transaction — no extra package</li>
+        <li><strong>Tier 2:</strong> PG + async shipper to S3 (<code>@aws-sdk/client-s3</code>) or Azure Immutable Blobs (<code>@azure/storage-blob</code>)</li>
+        <li><strong>Tier 3:</strong> transactional outbox + Kafka — only when multi-consumer / SIEM / customer webhook fan-out justifies it</li>
+        <li><strong>Retention:</strong> table partitioning via <code>pg_partman</code> (DB extension, not npm); object-lock retention on cold sink</li>
+        <li><span class="tag tag-conv">Convention</span>Never <code>await kafka.send(event)</code> inside a request transaction without DB-side persistence.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="logging">
+      <h2><a class="anchor" href="#logging">#</a>Structured logging</h2>
+      <ul class="picks">
+        <li><strong>Logger:</strong> Pino — <code>pino</code> (built into Fastify)</li>
+        <li><strong>Pretty-print (dev only):</strong> <code>pino-pretty</code></li>
+        <li><strong>Transport:</strong> <code>pino.transport()</code> to worker thread for prod log shipping</li>
+        <li><span class="tag tag-conv">Convention</span>Lint-enforced: no <code>console.log</code>, no string-interpolation logging, no full-body logging (hash if correlation needed).</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="observability">
+      <h2><a class="anchor" href="#observability">#</a>Observability</h2>
+      <ul class="picks">
+        <li><strong>Tracing/metrics SDK:</strong> <code>@opentelemetry/sdk-node</code></li>
+        <li><strong>Auto-instrumentation:</strong> <code>@opentelemetry/auto-instrumentations-node</code></li>
+        <li><strong>Exporter:</strong> <code>@opentelemetry/exporter-trace-otlp-http</code></li>
+        <li><strong>LLM-aware spans:</strong> <code>@arizeai/openinference-instrumentation-fastify</code> (plus OpenAI / Anthropic / LangChain OpenInference instrumentations)</li>
+        <li><strong>LLM-specific UX:</strong> Langfuse — <code>langfuse</code> (self-host in-VPC for regulated data)</li>
+        <li><strong>Eval gates in CI:</strong> <code>promptfoo</code></li>
+      </ul>
+    </section>
+
+    <section class="cat" id="llm">
+      <h2><a class="anchor" href="#llm">#</a>LLM / agent layer</h2>
+      <ul class="picks">
+        <li><strong>Anthropic:</strong> <code>@anthropic-ai/sdk</code></li>
+        <li><strong>OpenAI + Azure OpenAI:</strong> <code>openai</code> (use <code>AzureOpenAI</code> class)</li>
+        <li><strong>Gemini / Vertex Gemini:</strong> <code>@google/genai</code></li>
+        <li><strong>Embeddings:</strong> Voyage — <code>voyageai</code> (Anthropic-recommended)</li>
+        <li><strong>Orchestration (default):</strong> Vercel AI SDK — <code>ai</code></li>
+        <li><strong>Long-running / branching agents:</strong> <code>@langchain/langgraph</code></li>
+        <li><strong>Higher-level agent framework (optional):</strong> <code>mastra</code></li>
+        <li><strong>Internal coding/automation agents:</strong> <code>@anthropic-ai/claude-agent-sdk</code></li>
+        <li><strong>Tool interop:</strong> <code>@modelcontextprotocol/sdk</code></li>
+        <li><strong>Tokenizers:</strong> <code>tiktoken</code>, <code>gpt-tokenizer</code>, <code>@anthropic-ai/tokenizer</code></li>
+        <li><strong>Effect-TS for agent orchestration:</strong> watch-list (<code>effect</code>, <code>@effect/ai</code>) — not in current paved road</li>
+        <li><span class="tag tag-conv">Convention</span>Prompt caching (<code>cache_control</code>) wherever system prompt or tenant context exceeds a few KB.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="http">
+      <h2><a class="anchor" href="#http">#</a>Outbound HTTP</h2>
+      <ul class="picks">
+        <li><strong>Client:</strong> <code>undici</code> (the fetch impl in Node 24)</li>
+        <li><strong>Lightweight AWS SigV4:</strong> <code>aws4fetch</code></li>
+        <li><span class="tag tag-anti">Anti-pick</span>axios, got, superagent — undici's connection pooling is decisive.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="testing">
+      <h2><a class="anchor" href="#testing">#</a>Testing</h2>
+      <ul class="picks">
+        <li><strong>Test runner:</strong> Vitest — <code>vitest</code></li>
+        <li><strong>Property-based:</strong> <code>@fast-check/vitest</code></li>
+        <li><strong>Integration (real deps):</strong> Testcontainers — <code>@testcontainers/postgresql</code>, <code>@testcontainers/redis</code>, <code>@testcontainers/kafka</code></li>
+        <li><strong>Fast inner-loop PG:</strong> <code>@electric-sql/pglite</code></li>
+        <li><strong>E2E:</strong> Playwright — <code>@playwright/test</code></li>
+        <li><strong>Prompt eval gates:</strong> <code>promptfoo</code></li>
+        <li><strong>Cross-language / external contract testing:</strong> Pact — <code>@pact-foundation/pact</code> (only at org or language boundaries)</li>
+        <li><span class="tag tag-conv">Convention</span><strong>In-org TS-to-TS contracts:</strong> compiler-as-contract-test + Renovate fan-out + <code>defineEvent</code> upcasters — no Pact required.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="isolation">
+      <h2><a class="anchor" href="#isolation">#</a>Multi-tenant isolation patterns <span class="tag tag-conv">Conventions</span></h2>
+      <ul class="picks">
+        <li>Pool model with hard fences; per-tenant schema or RLS in PG; per-tenant prefix in Redis / OpenSearch / object storage.</li>
+        <li>Per-tenant KMS key — <code>@aws-sdk/client-kms</code> / <code>@azure/keyvault-keys</code> / <code>@google-cloud/kms</code>.</li>
+        <li>Audit trail data residency: region-pinned via tenant attribute.</li>
+        <li>Append-only <code>audit_events</code> topic in Kafka (Tier 3) → OpenSearch + cold storage with object-lock retention.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="platform">
+      <h2><a class="anchor" href="#platform">#</a>Platform package shape (org's internal <code>@org/*</code> family)</h2>
+      <ul class="picks">
+        <li><code>@org/contracts</code> — Zod schemas, <code>EventEnvelope</code>, <code>defineEvent({ name, schemas, upcast })</code></li>
+        <li><code>@org/server</code> — Fastify factory <code>buildApp()</code>, <code>defineAction()</code> helper</li>
+        <li><code>@org/auth</code> — JWT mint/verify, JWKS cache, capability tokens, WorkOS/Clerk adapters</li>
+        <li><code>@org/tenancy</code> — ALS context spine, RLS helpers, fast-check generators</li>
+        <li><code>@org/db</code> — <code>postgres</code> + Drizzle setup, migration runner, RLS policy generator</li>
+        <li><code>@org/audit</code> — table migration + Zod schemas; optional Tier 2/3 sub-modules</li>
+        <li><code>@org/observability</code> — Pino + OTel + OpenInference wiring as one import</li>
+        <li><code>@org/messaging</code> — SQS / Kafka / BullMQ wrappers; auto-upcast + idempotency</li>
+        <li><code>@org/llm</code> — Anthropic / OpenAI / Gemini clients, prompt-caching defaults, AbortSignal plumbing</li>
+        <li><code>@org/workflow</code> (optional) — typed state-machine helper for saga-table pattern</li>
+        <li><code>@org/testing</code> — Testcontainers harness, fast-check arbitraries</li>
+        <li><code>@org/eslint-config</code> — lints: no <code>console.log</code>, no raw <code>fetch</code>, no <code>req.headers</code> reads in handlers, no <code>.strict()</code> on event schemas, no <code>fastify</code> imports under <code>src/domain/**</code>, every <code>src/routes/**</code> file exports a <code>defineAction()</code></li>
+        <li><code>@org/tsconfig</code> — <code>strict</code>, <code>noUncheckedIndexedAccess</code>, <code>exactOptionalPropertyTypes</code></li>
+      </ul>
+    </section>
+
+    <section class="cat" id="monorepo">
+      <h2><a class="anchor" href="#monorepo">#</a>Monorepo &amp; release</h2>
+      <ul class="picks">
+        <li><strong>Workspace:</strong> <code>pnpm</code> workspaces, Turborepo (<code>turbo</code>), or Nx</li>
+        <li><strong>Versioning:</strong> single-version monorepo via Changesets (<code>@changesets/cli</code>) in fixed mode</li>
+        <li><strong>Update fan-out:</strong> Renovate (or Dependabot)</li>
+        <li><strong>Migration codemods:</strong> <code>jscodeshift</code> or <code>ast-grep</code></li>
+        <li><strong>Registry:</strong> GitHub Packages, JFrog Artifactory, Verdaccio, or npm Pro</li>
+        <li><strong>Provenance / signing:</strong> npm <code>--provenance</code> or Sigstore</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="secrets">
+      <h2><a class="anchor" href="#secrets">#</a>Auth / secrets at infra level</h2>
+      <ul class="picks">
+        <li><strong>Cloud creds (unified façade):</strong> <code>@aws-sdk/credential-providers</code>, <code>@azure/identity</code>, <code>google-auth-library</code> behind a single <code>cloudCredential()</code> factory</li>
+        <li><strong>Secrets:</strong> cloud-native (AWS Secrets Manager / Azure Key Vault / GCP Secret Manager)</li>
+        <li><strong>OIDC federation in CI/CD:</strong> <code>aws-actions/configure-aws-credentials</code>, <code>azure/login</code>, <code>google-github-actions/auth</code></li>
+      </ul>
+    </section>
+
+    <section class="cat anti" id="anti">
+      <h2><a class="anchor" href="#anti">#</a>Anti-picks (explicit removals, with reasons)</h2>
+      <ul class="picks">
+        <li><code>aws-sdk</code> v2 — replaced by modular <code>@aws-sdk/*</code> v3.</li>
+        <li>Sequelize, TypeORM, Knex — Drizzle wins on types and SQL honesty.</li>
+        <li><code>@azure/openai</code> — deprecated; use <code>openai</code> package with <code>AzureOpenAI</code> class.</li>
+        <li>Apache Pulsar — weak JS client story.</li>
+        <li>LangChain.js non-LangGraph parts — use LangGraph specifically, or Mastra / Vercel AI SDK.</li>
+        <li>Pact for in-org TS-to-TS contracts — compiler + Renovate fan-out subsumes it.</li>
+        <li>Self-built voice agents — use LiveKit Agents or OpenAI Realtime.</li>
+        <li>Multi-cloud abstraction layers — pick one cloud as home, abstract only auth.</li>
+        <li>NestJS — too much ceremony for a Fastify-shaped problem.</li>
+        <li>axios / got / superagent — use <code>undici</code> directly.</li>
+        <li><code>console.log</code> anywhere in app code — lint-rule it.</li>
+        <li>String-interpolation log messages — pass structured objects.</li>
+      </ul>
+    </section>
+
+    <section class="cat" id="verify">
+      <h2><a class="anchor" href="#verify">#</a>Things to verify before committing each major version</h2>
+      <p style="color: var(--ink-3); font-size: 0.9rem; margin-top: 0.5rem;">(From <a href="FUTURE_WEB_API_DEEP.md">FUTURE_WEB_API_DEEP.md</a> §12.)</p>
+      <ul class="picks">
+        <li><code>@fastify/type-provider-zod</code> Zod 4 compatibility.</li>
+        <li><code>@fastify/request-context</code> interaction with streaming responses (SSE keeps ALS alive past <code>onResponse</code>).</li>
+        <li><code>@arizeai/openinference-instrumentation-fastify</code> coverage of streaming LLM responses.</li>
+        <li>WorkOS / Clerk SCIM event delivery semantics (at-least-once → audit pipeline idempotent).</li>
+        <li>OpenFGA vs Cerbos for the chosen tenancy model.</li>
+        <li>Pino transport behaviour under k8s log rotation.</li>
+        <li><code>onRequestAbort</code> reliability under your reverse-proxy / load-balancer combination.</li>
+        <li>Web Streams <code>Response</code> / <code>ReadableStream</code> payload support in <code>onSend</code> across third-party Fastify plugins.</li>
+        <li><code>fastify-plugin</code> wrapping rules for any plugin that needs to publish decorators across scopes.</li>
+      </ul>
+    </section>
+
+    <footer class="usage" id="usage">
+      <h2>How to use this file</h2>
+      <ul class="picks">
+        <li><strong>New service kickoff</strong><code>pnpm add</code> the relevant rows; the platform package (<code>@org/server</code>) pulls the cross-cutting ones transitively.</li>
+        <li><strong>Architecture review</strong>cross-check the codebase against this ledger; any deviation should have a written ADR (Architecture Decision Record, not the routing pattern) in <code>docs/adr/</code>.</li>
+        <li><strong>Hiring / onboarding</strong>this is the technical-stack handout. Two minutes to scan, two days to be productive against the platform package.</li>
+        <li><strong>AI coding-assistant context</strong>bundle this file plus the long-form docs into the assistant's project knowledge (<code>CLAUDE.md</code>, <code>.cursor/rules/</code>). The assistant generates code that matches the picks instead of inventing alternatives.</li>
+      </ul>
+    </footer>
+
+  </main>
+</div>
+</body>
+</html>

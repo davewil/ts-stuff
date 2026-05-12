@@ -1,5 +1,7 @@
 # Web / API Layer — Deep Dive
 
+> **About this document.** Exploratory technical thinking — *how I'd reason about the Web/API layer from the outside*, not a committed architecture. Specific picks (Fastify, Pino, OTel, etc.) are opinionated because vague picks aren't useful for discussion, but each is a defensible choice among alternatives. The structure and patterns matter more than the exact packages; happy to argue any specific choice.
+
 Companion to [FUTURE_STACK_OPTIONS.md](FUTURE_STACK_OPTIONS.md) §6 ("Web / API"). Where the parent doc gives the headline pick (Fastify + Zod), this one drills into the *per-request* mechanics that matter for a regulated, multi-tenant, agentic platform: authentication, tenant resolution, request-scoped context, audit, structured logging, observability, and performance.
 
 Audience: someone evaluating whether the recommended stack actually composes into a coherent request lifecycle, and wanting to see the seams.
@@ -695,7 +697,7 @@ The LLM span is the one most homegrown setups miss. `@arizeai/openinference-*` i
 
 ## 8. Performance — what to measure, what to tune
 
-Order of magnitude (Node 22 + Fastify on a single 4-core container):
+Order of magnitude (Node 24 + Fastify on a single 4-core container — figures broadly hold for Node 22):
 
 - Hello-world JSON: 60–80k req/s.
 - With auth + Zod validation + Postgres lookup: 8–15k req/s.
@@ -708,7 +710,7 @@ Order of magnitude (Node 22 + Fastify on a single 4-core container):
 3. **Avoid `await` in hot paths that don't need it**. Each `await` is a microtask hop; in a hook fired 60k times/sec it adds up. If something is sync (e.g. cached JWKS verification on a cached key), keep it sync.
 4. **Compression** — Brotli is much slower than gzip on small payloads. For sub-1KB bodies, skip compression. Streaming responses (SSE for LLM) should *never* be compressed (latency >> bytes saved).
 5. **Logging** — Pino + transport in worker thread (`pino.transport({ target: '...', target: 'pino/file' })`) keeps log I/O off the main thread.
-6. **`undici` over `axios`** — `undici` is the fetch impl in Node 22; for outbound HTTP, use it directly instead of axios/got/superagent. Connection pooling is its differentiator.
+6. **`undici` over `axios`** — `undici` is the fetch impl in Node (since 18, current in 24); for outbound HTTP, use it directly instead of axios/got/superagent. Connection pooling is its differentiator.
 7. **Backpressure** — `@fastify/under-pressure` returns 503 when event-loop delay exceeds a threshold. Better to shed load gracefully than to fail every in-flight request.
 
 ### Common foot-guns
@@ -721,7 +723,7 @@ Order of magnitude (Node 22 + Fastify on a single 4-core container):
 
 ### When to reach for Bun (and when not)
 
-For a regulated production target right now: stay on Node 22 LTS. Bun is 1.5–2× faster on micro-benchmarks but the operational surface (debuggers, profilers, mature OTel SDKs, package compatibility for native deps like `@confluentinc/kafka-javascript`) is materially smaller. Use Bun for:
+For a regulated production target right now: stay on Node 24 LTS (Active LTS since Oct 2025; Node 22 Maintenance LTS through Apr 2027 for services not yet upgraded). Bun is 1.5–2× faster on micro-benchmarks but the operational surface (debuggers, profilers, mature OTel SDKs, package compatibility for native deps like `@confluentinc/kafka-javascript`) is materially smaller. Use Bun for:
 
 - Local dev (faster `vitest` runs).
 - Test harness in CI (often 30–50% faster).
