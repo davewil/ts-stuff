@@ -15,9 +15,9 @@ describe('Task domain', () => {
     it('rejects whitespace-only titles', rejects_empty_title)
     it('rejects titles longer than 200 characters', rejects_title_over_200_chars)
   })
-})
 
   describe('getTask', () => {
     it('returns undefined for an unknown id', returns_undefined_for_unknown_id)
   })
   
+})
