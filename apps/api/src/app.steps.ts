@@ -4,7 +4,7 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql'
-import { buildApp } from './app.ts'
+import { buildApiApp } from './app.ts'
 import { createPgClient, type DbClient } from './db/client.ts'
 import { migratePg } from './db/migrate.ts'
 import { createDrizzleTaskRepo } from './db/task-repo.ts'
@@ -21,7 +21,7 @@ export async function start_app_server(): Promise<void> {
   await migratePg(dbClient.db)
 
   let counter = 0
-  const a = await buildApp({
+  const a = await buildApiApp({
     taskDeps: {
       repo: createDrizzleTaskRepo(dbClient.db),
       clock: () => new Date('2026-05-12T00:00:00.000Z'),

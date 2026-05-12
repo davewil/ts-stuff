@@ -2,6 +2,18 @@
 
 Interview-prep test bed for a regulated multi-tenant Node/TS backend. See [STACK_DECISIONS.md](STACK_DECISIONS.md) and [FUTURE_WEB_API_DEEP.md](FUTURE_WEB_API_DEEP.md) for the broader stack reasoning.
 
+## Monorepo layout (pnpm workspaces)
+
+```
+packages/server/   -- @app/server: reusable buildApp, defineAction, problem+json
+apps/api/          -- the tasks demo app (HTTP + domain + Postgres)
+```
+
+- `@app/server` is the platform library. Future services depending on it import via `workspace:*`; the package exports `.ts` directly so there's no build step (Node 24 strips types, vitest transforms in dev).
+- `apps/api` is the only consumer today. Adding a second consumer means another folder under `apps/` and another `workspace:*` dependency.
+- Run things from the root: `pnpm test`, `pnpm typecheck`, `pnpm dev`, `pnpm start`, `pnpm db:generate`. Most root scripts just fan out via `pnpm -r` or `pnpm -F api`.
+- Tests live next to the code that owns them. `packages/server` owns the library contract tests (buildApp, problem+json mapper). `apps/api` owns the consumer behaviour tests (real HTTP, real Postgres).
+
 ## Test organisation: scenario catalogue + steps file
 
 Every test file is split in two:

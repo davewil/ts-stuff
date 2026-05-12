@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { buildApp } from './app.ts'
+import { buildApiApp } from './app.ts'
 import { createPgClient } from './db/client.ts'
 import { migratePg } from './db/migrate.ts'
 import { createDrizzleTaskRepo } from './db/task-repo.ts'
@@ -15,7 +15,7 @@ if (!databaseUrl) {
 const dbClient = createPgClient(databaseUrl)
 await migratePg(dbClient.db)
 
-const app = await buildApp({
+const app = await buildApiApp({
   taskDeps: {
     repo: createDrizzleTaskRepo(dbClient.db),
     clock: () => new Date(),

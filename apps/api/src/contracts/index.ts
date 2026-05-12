@@ -9,4 +9,4 @@ export {
   type TaskTitle,
 } from './task.ts'
 
-export { ProblemSchema, type Problem } from './problem.ts'
+export { ProblemSchema, type Problem } from '@app/server'
