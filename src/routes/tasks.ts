@@ -30,7 +30,7 @@ export const taskRoutes: FastifyPluginAsyncZod<TaskRoutesOptions> = async (
       },
     },
     async (req, reply) => {
-      const task = createTask(req.body, deps)
+      const task = await createTask(req.body, deps)
       reply.code(201)
       return task
     },
@@ -45,7 +45,7 @@ export const taskRoutes: FastifyPluginAsyncZod<TaskRoutesOptions> = async (
       },
     },
     async (req) => {
-      const task = getTask(req.params.id, deps)
+      const task = await getTask(req.params.id, deps)
       if (!task) {
         throw app.httpErrors.notFound(`task ${req.params.id} not found`)
       }

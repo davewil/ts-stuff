@@ -60,6 +60,21 @@ Every test file is split in two:
 - [src/domain/tasks.test.ts](src/domain/tasks.test.ts) + [src/domain/tasks.steps.ts](src/domain/tasks.steps.ts) — pure unit-test shape with `freshDeps()` helper per step.
 - [src/app.test.ts](src/app.test.ts) + [src/app.steps.ts](src/app.steps.ts) — HTTP integration shape with `start_app_server` / `stop_app_server` lifecycle steps.
 
+## Data layer: Drizzle on Postgres (`src/db/`)
+
+Per [STACK_DECISIONS.md](STACK_DECISIONS.md), the runtime database is Postgres accessed via Drizzle on top of the `postgres` (porsager) driver. The in-memory repo has been retired — every test now exercises real SQL.
+
+- [src/db/schema.ts](src/db/schema.ts) is the Drizzle source of truth. Migrations are generated with `pnpm db:generate` (writes SQL files to `src/db/migrations/`).
+- [src/db/client.ts](src/db/client.ts) exports `createPgClient(url)` for production (postgres-js + Drizzle). `src/db/migrate.ts` exposes `migratePg` (postgres-js) and `migratePgliteDb` (in-process PGlite) for the two test paths.
+- [src/db/task-repo.ts](src/db/task-repo.ts) is driver-agnostic: `createDrizzleTaskRepo(db)` accepts either a `PostgresJsDatabase` or a `PgliteDatabase`. Both share the same query code so the production codepath is exercised by every domain test.
+- `DATABASE_URL` is required at boot in production; the server runs pending migrations before opening the listener.
+
+### Dual test strategy
+
+- **Domain tests** (`src/domain/*.test.ts`) use **PGlite** — in-process WASM Postgres — for sub-second feedback. Each `freshDeps()` builds a new PGlite instance and applies migrations.
+- **HTTP integration tests** (`src/app.test.ts`) use **`@testcontainers/postgresql`** — spawns a real `postgres:16-alpine` container shared across the suite via `beforeAll(start_app_server)` / `afterAll(stop_app_server)`. Maximum fidelity to prod.
+- Running tests inside the Docker image (`docker compose run --rm test`) works because the test service mounts `/var/run/docker.sock`; Testcontainers spawns sibling Postgres containers on the host daemon.
+
 ## Web framework: Fastify with Zod type provider
 
 The HTTP layer is Fastify 5 wired to the existing `src/contracts/` schemas via `@fastify/type-provider-zod`. The framework choice and plugin list track [STACK_DECISIONS.md](STACK_DECISIONS.md).

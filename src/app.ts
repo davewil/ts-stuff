@@ -1,6 +1,5 @@
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify'
 import type { FastifySchemaValidationError } from 'fastify/types/schema.d.ts'
-import { randomUUID } from 'node:crypto'
 import sensible from '@fastify/sensible'
 import helmet from '@fastify/helmet'
 import {
@@ -10,12 +9,12 @@ import {
   type ZodTypeProvider,
 } from '@fastify/type-provider-zod'
 import type { Problem } from './contracts/index.ts'
-import { createInMemoryTaskRepo, type TaskDeps } from './domain/tasks.ts'
+import type { TaskDeps } from './domain/tasks.ts'
 import { healthRoutes } from './routes/health.ts'
 import { taskRoutes } from './routes/tasks.ts'
 
-export type AppOverrides = {
-  taskDeps?: TaskDeps
+export type AppOptions = {
+  taskDeps: TaskDeps
   loggerEnabled?: boolean
 }
 
@@ -46,8 +45,6 @@ function problemFor(err: unknown): { status: number; body: Problem } {
     }
   }
 
-  // Fastify guarantees its own thrown errors are FastifyError-shaped; anything
-  // else (a raw string throw, a non-Error object) falls through to the 500 case.
   const fe = err as FastifyError
   const message = typeof fe?.message === 'string' ? fe.message : 'unknown error'
 
@@ -87,17 +84,9 @@ function problemFor(err: unknown): { status: number; body: Problem } {
   }
 }
 
-export async function buildApp(
-  overrides: AppOverrides = {},
-): Promise<FastifyInstance> {
-  const taskDeps: TaskDeps = overrides.taskDeps ?? {
-    repo: createInMemoryTaskRepo(),
-    clock: () => new Date(),
-    id: () => randomUUID(),
-  }
-
+export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: overrides.loggerEnabled ?? false,
+    logger: opts.loggerEnabled ?? false,
     disableRequestLogging: true,
   }).withTypeProvider<ZodTypeProvider>()
 
@@ -123,7 +112,7 @@ export async function buildApp(
   })
 
   await app.register(healthRoutes)
-  await app.register(taskRoutes, { deps: taskDeps })
+  await app.register(taskRoutes, { deps: opts.taskDeps })
 
   await app.ready()
   return app

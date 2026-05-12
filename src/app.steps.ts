@@ -1,16 +1,29 @@
 import { expect } from 'vitest'
 import type { FastifyInstance } from 'fastify'
+import {
+  PostgreSqlContainer,
+  type StartedPostgreSqlContainer,
+} from '@testcontainers/postgresql'
 import { buildApp } from './app.ts'
-import { createInMemoryTaskRepo } from './domain/tasks.ts'
+import { createPgClient, type DbClient } from './db/client.ts'
+import { migratePg } from './db/migrate.ts'
+import { createDrizzleTaskRepo } from './db/task-repo.ts'
 
+let container: StartedPostgreSqlContainer | undefined
+let dbClient: DbClient | undefined
 let app: FastifyInstance | undefined
 let baseUrl = ''
 
 export async function start_app_server(): Promise<void> {
+  container = await new PostgreSqlContainer('postgres:16-alpine').start()
+  const url = container.getConnectionUri()
+  dbClient = createPgClient(url)
+  await migratePg(dbClient.db)
+
   let counter = 0
   const a = await buildApp({
     taskDeps: {
-      repo: createInMemoryTaskRepo(),
+      repo: createDrizzleTaskRepo(dbClient.db),
       clock: () => new Date('2026-05-12T00:00:00.000Z'),
       id: () => `task_${++counter}`,
     },
@@ -21,7 +34,11 @@ export async function start_app_server(): Promise<void> {
 
 export async function stop_app_server(): Promise<void> {
   await app?.close()
+  await dbClient?.close()
+  await container?.stop()
   app = undefined
+  dbClient = undefined
+  container = undefined
   baseUrl = ''
 }
 

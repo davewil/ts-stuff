@@ -1,16 +1,37 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: node-ts-test-postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
   app:
     build:
       context: .
       target: runtime
     image: node-ts-test:dev
     container_name: node-ts-test-app
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "3003:3003"
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3003
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/app
     healthcheck:
       test:
         - CMD
@@ -19,8 +40,8 @@ services:
         - "fetch('http://127.0.0.1:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 10s
       timeout: 3s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
 
   test:
@@ -32,3 +53,9 @@ services:
     profiles: ["test"]
     environment:
       CI: "true"
+    # Testcontainers inside the test container needs the host's Docker daemon
+    # to spawn sibling Postgres containers. /var/run/docker.sock is mounted
+    # read-write; testcontainers reads /tmp for the .testcontainers.properties
+    # file and shares container labels with the host via the daemon.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

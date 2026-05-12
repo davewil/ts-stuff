@@ -7,8 +7,8 @@ import {
 export type { CreateTaskInput, Task } from '../contracts/index.ts'
 
 export type TaskRepo = {
-  insert: (task: Task) => void
-  findById: (id: string) => Task | undefined
+  insert: (task: Task) => Promise<void>
+  findById: (id: string) => Promise<Task | undefined>
 }
 
 export type Clock = () => Date
@@ -24,19 +24,10 @@ export class TaskValidationError extends Error {
   override readonly name = 'TaskValidationError'
 }
 
-export function createInMemoryTaskRepo(): TaskRepo {
-  const store = new Map<string, Task>()
-  return {
-    insert(task) {
-      store.set(task.id, task)
-    },
-    findById(id) {
-      return store.get(id)
-    },
-  }
-}
-
-export function createTask(input: CreateTaskInput, deps: TaskDeps): Task {
+export async function createTask(
+  input: CreateTaskInput,
+  deps: TaskDeps,
+): Promise<Task> {
   const result = TaskTitleSchema.safeParse(input.title)
   if (!result.success) {
     const first = result.error.issues[0]
@@ -47,10 +38,13 @@ export function createTask(input: CreateTaskInput, deps: TaskDeps): Task {
     title: result.data,
     createdAt: deps.clock().toISOString(),
   }
-  deps.repo.insert(task)
+  await deps.repo.insert(task)
   return task
 }
 
-export function getTask(id: string, deps: Pick<TaskDeps, 'repo'>): Task | undefined {
+export function getTask(
+  id: string,
+  deps: Pick<TaskDeps, 'repo'>,
+): Promise<Task | undefined> {
   return deps.repo.findById(id)
 }
