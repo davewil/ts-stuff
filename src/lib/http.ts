@@ -1,11 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Problem } from '../contracts/index.ts'
 
-export type Problem = {
-  type: string
-  title: string
-  status: number
-  detail?: string
-}
+export type { Problem } from '../contracts/index.ts'
 
 export function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status

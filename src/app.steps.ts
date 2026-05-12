@@ -67,9 +67,27 @@ export async function missing_title_returns_400_problem_json(): Promise<void> {
   })
   expect(res.status).toBe(400)
   expect(res.headers.get('content-type')).toContain('application/problem+json')
-  const body = (await res.json()) as { type: string; status: number }
+  const body = (await res.json()) as {
+    type: string
+    status: number
+    detail: string
+  }
   expect(body.type).toBe('invalid_body')
   expect(body.status).toBe(400)
+  // Zod issue must mention the offending field path so clients can fix the request.
+  expect(body.detail).toMatch(/title/i)
+}
+
+export async function strict_schema_rejects_unknown_keys(): Promise<void> {
+  const res = await fetch(`${baseUrl}/tasks`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'fine', injected: 'value' }),
+  })
+  expect(res.status).toBe(400)
+  const body = (await res.json()) as { type: string; detail: string }
+  expect(body.type).toBe('invalid_body')
+  expect(body.detail).toMatch(/injected|unrecognized|unknown/i)
 }
 
 export async function invalid_json_body_returns_400(): Promise<void> {

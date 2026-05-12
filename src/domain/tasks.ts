@@ -1,12 +1,10 @@
-export type Task = {
-  readonly id: string
-  readonly title: string
-  readonly createdAt: string
-}
+import {
+  TaskTitleSchema,
+  type CreateTaskInput,
+  type Task,
+} from '../contracts/index.ts'
 
-export type CreateTaskInput = {
-  readonly title: string
-}
+export type { CreateTaskInput, Task } from '../contracts/index.ts'
 
 export type TaskRepo = {
   insert: (task: Task) => void
@@ -39,16 +37,14 @@ export function createInMemoryTaskRepo(): TaskRepo {
 }
 
 export function createTask(input: CreateTaskInput, deps: TaskDeps): Task {
-  const trimmed = input.title.trim()
-  if (trimmed.length === 0) {
-    throw new TaskValidationError('title must not be empty')
-  }
-  if (trimmed.length > 200) {
-    throw new TaskValidationError('title must be 200 characters or fewer')
+  const result = TaskTitleSchema.safeParse(input.title)
+  if (!result.success) {
+    const first = result.error.issues[0]
+    throw new TaskValidationError(first?.message ?? 'invalid title')
   }
   const task: Task = {
     id: deps.id(),
-    title: trimmed,
+    title: result.data,
     createdAt: deps.clock().toISOString(),
   }
   deps.repo.insert(task)

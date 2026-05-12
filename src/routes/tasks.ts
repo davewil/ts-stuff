@@ -1,3 +1,5 @@
+import type { IncomingMessage } from 'node:http'
+import { match } from 'ts-pattern'
 import type { Handler } from '../lib/router.ts'
 import { InvalidJsonError, readJson, sendJson, sendProblem } from '../lib/http.ts'
 import {
@@ -6,36 +8,61 @@ import {
   TaskValidationError,
   type TaskDeps,
 } from '../domain/tasks.ts'
+import { CreateTaskInputSchema, type Task } from '../contracts/index.ts'
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+type PostOutcome =
+  | { kind: 'created'; task: Task }
+  | { kind: 'invalid_json'; detail: string }
+  | { kind: 'invalid_body'; detail: string }
+
+async function evaluatePostTask(
+  req: IncomingMessage,
+  deps: TaskDeps,
+): Promise<PostOutcome> {
+  let raw: unknown
+  try {
+    raw = await readJson(req)
+  } catch (err) {
+    if (err instanceof InvalidJsonError) {
+      return { kind: 'invalid_json', detail: err.message }
+    }
+    throw err
+  }
+
+  const parsed = CreateTaskInputSchema.safeParse(raw)
+  if (!parsed.success) {
+    const detail = parsed.error.issues
+      .map((issue) => {
+        const path = issue.path.join('.')
+        return path ? `${path}: ${issue.message}` : issue.message
+      })
+      .join('; ')
+    return { kind: 'invalid_body', detail }
+  }
+
+  try {
+    const task = createTask(parsed.data, deps)
+    return { kind: 'created', task }
+  } catch (err) {
+    if (err instanceof TaskValidationError) {
+      return { kind: 'invalid_body', detail: err.message }
+    }
+    throw err
+  }
 }
 
 export function postTaskHandler(deps: TaskDeps): Handler {
   return async ({ req, res }) => {
-    let body: unknown
-    try {
-      body = await readJson(req)
-    } catch (err) {
-      if (err instanceof InvalidJsonError) {
-        return sendProblem(res, 400, 'invalid_json', err.message)
-      }
-      throw err
-    }
-
-    if (!isRecord(body) || typeof body['title'] !== 'string') {
-      return sendProblem(res, 400, 'invalid_body', 'title (string) is required')
-    }
-
-    try {
-      const task = createTask({ title: body['title'] }, deps)
-      sendJson(res, 201, task)
-    } catch (err) {
-      if (err instanceof TaskValidationError) {
-        return sendProblem(res, 400, 'invalid_body', err.message)
-      }
-      throw err
-    }
+    const outcome = await evaluatePostTask(req, deps)
+    match(outcome)
+      .with({ kind: 'created' }, ({ task }) => sendJson(res, 201, task))
+      .with({ kind: 'invalid_json' }, ({ detail }) =>
+        sendProblem(res, 400, 'invalid_json', detail),
+      )
+      .with({ kind: 'invalid_body' }, ({ detail }) =>
+        sendProblem(res, 400, 'invalid_body', detail),
+      )
+      .exhaustive()
   }
 }
 

@@ -6,6 +6,7 @@ import {
   post_then_get_task_round_trip,
   start_app_server,
   stop_app_server,
+  strict_schema_rejects_unknown_keys,
   unknown_route_returns_404_problem_json,
   unknown_task_id_returns_404,
 } from './app.steps.ts'
@@ -21,6 +22,7 @@ describe('HTTP API', () => {
   describe('POST /tasks then GET /tasks/:id', () => {
     it('creates a task and retrieves it', post_then_get_task_round_trip)
     it('returns problem+json 400 when title is missing', missing_title_returns_400_problem_json)
+    it('rejects bodies with unknown keys (strict schema)', strict_schema_rejects_unknown_keys)
     it('returns 400 for non-JSON bodies', invalid_json_body_returns_400)
     it('returns 404 for unknown task id', unknown_task_id_returns_404)
   })

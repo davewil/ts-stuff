@@ -60,6 +60,19 @@ Every test file is split in two:
 - [src/domain/tasks.test.ts](src/domain/tasks.test.ts) + [src/domain/tasks.steps.ts](src/domain/tasks.steps.ts) — pure unit-test shape with `freshDeps()` helper per step.
 - [src/app.test.ts](src/app.test.ts) + [src/app.steps.ts](src/app.steps.ts) — HTTP integration shape with `start_app_server` / `stop_app_server` lifecycle steps.
 
+## Contracts (`src/contracts/`)
+
+All API resource schemas, request/response shapes, and message envelopes live in `src/contracts/` as Zod schemas with inferred TS types. This is the single source of truth for data crossing the HTTP boundary; everything downstream (routes, domain, future event payloads) imports from here.
+
+- Schemas are exported alongside their inferred types (`TaskSchema` + `type Task = z.infer<...>`).
+- Inferred types are wrapped in `Readonly<>` where they represent values passed across boundaries.
+- Inputs use `.strict()` to reject unknown keys at the HTTP boundary (defence in depth — clients catch typos early).
+- Error messages use Zod 4's `{ error: "..." }` option form, not the deprecated `{ message: "..." }`.
+- ISO datetimes use the top-level `z.iso.datetime()` form (Zod 4), not the deprecated `z.string().datetime()`.
+- The domain re-exports its public types from contracts so consumers depend on contracts directly when possible, but can still import `Task` / `CreateTaskInput` via the domain module.
+
+The folder is expected to be extracted into its own package (`@org/contracts` per the ledger) when Step 4 lands `buildApp` as a reusable library. Until then, keeping it as a folder avoids monorepo plumbing.
+
 ## TypeScript
 
 - `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` are non-negotiable. Matches the ledger's "TS config convention" row.
