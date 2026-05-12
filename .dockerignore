@@ -1,0 +1,33 @@
+# dependencies — re-installed inside the image from the lockfile
+node_modules
+
+# vcs + ci
+.git
+.github
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# agent/workspace state
+.claude
+.nwave
+.omc
+.remember
+
+# editor + os
+.vscode
+.idea
+.DS_Store
+
+# build artefacts
+dist
+coverage
+
+# secrets
+.env
+.env.*
+
+# project docs (not needed at runtime)
+*.md
+*.html
