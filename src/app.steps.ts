@@ -1,34 +1,27 @@
 import { expect } from 'vitest'
-import type { AddressInfo } from 'node:net'
-import type { Server } from 'node:http'
-import { createApp } from './app.ts'
+import type { FastifyInstance } from 'fastify'
+import { buildApp } from './app.ts'
 import { createInMemoryTaskRepo } from './domain/tasks.ts'
 
-let server: Server | undefined
+let app: FastifyInstance | undefined
 let baseUrl = ''
 
 export async function start_app_server(): Promise<void> {
   let counter = 0
-  const s = createApp({
+  const a = await buildApp({
     taskDeps: {
       repo: createInMemoryTaskRepo(),
       clock: () => new Date('2026-05-12T00:00:00.000Z'),
       id: () => `task_${++counter}`,
     },
   })
-  server = s
-  await new Promise<void>((resolve) => s.listen(0, '127.0.0.1', resolve))
-  const addr = s.address() as AddressInfo
-  baseUrl = `http://127.0.0.1:${addr.port}`
+  app = a
+  baseUrl = await a.listen({ host: '127.0.0.1', port: 0 })
 }
 
 export async function stop_app_server(): Promise<void> {
-  const s = server
-  if (!s) return
-  await new Promise<void>((resolve, reject) =>
-    s.close((err) => (err ? reject(err) : resolve())),
-  )
-  server = undefined
+  await app?.close()
+  app = undefined
   baseUrl = ''
 }
 
@@ -74,7 +67,6 @@ export async function missing_title_returns_400_problem_json(): Promise<void> {
   }
   expect(body.type).toBe('invalid_body')
   expect(body.status).toBe(400)
-  // Zod issue must mention the offending field path so clients can fix the request.
   expect(body.detail).toMatch(/title/i)
 }
 

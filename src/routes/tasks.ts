@@ -1,81 +1,55 @@
-import type { IncomingMessage } from 'node:http'
-import { match } from 'ts-pattern'
-import type { Handler } from '../lib/router.ts'
-import { InvalidJsonError, readJson, sendJson, sendProblem } from '../lib/http.ts'
+import { z } from 'zod'
+import type { FastifyPluginAsyncZod } from '@fastify/type-provider-zod'
 import {
-  createTask,
-  getTask,
-  TaskValidationError,
-  type TaskDeps,
-} from '../domain/tasks.ts'
-import { CreateTaskInputSchema, type Task } from '../contracts/index.ts'
+  CreateTaskInputSchema,
+  TaskIdSchema,
+  TaskSchema,
+} from '../contracts/index.ts'
+import { createTask, getTask, type TaskDeps } from '../domain/tasks.ts'
 
-type PostOutcome =
-  | { kind: 'created'; task: Task }
-  | { kind: 'invalid_json'; detail: string }
-  | { kind: 'invalid_body'; detail: string }
+const GetTaskParamsSchema = z.object({
+  id: TaskIdSchema,
+})
 
-async function evaluatePostTask(
-  req: IncomingMessage,
-  deps: TaskDeps,
-): Promise<PostOutcome> {
-  let raw: unknown
-  try {
-    raw = await readJson(req)
-  } catch (err) {
-    if (err instanceof InvalidJsonError) {
-      return { kind: 'invalid_json', detail: err.message }
-    }
-    throw err
-  }
-
-  const parsed = CreateTaskInputSchema.safeParse(raw)
-  if (!parsed.success) {
-    const detail = parsed.error.issues
-      .map((issue) => {
-        const path = issue.path.join('.')
-        return path ? `${path}: ${issue.message}` : issue.message
-      })
-      .join('; ')
-    return { kind: 'invalid_body', detail }
-  }
-
-  try {
-    const task = createTask(parsed.data, deps)
-    return { kind: 'created', task }
-  } catch (err) {
-    if (err instanceof TaskValidationError) {
-      return { kind: 'invalid_body', detail: err.message }
-    }
-    throw err
-  }
+export type TaskRoutesOptions = {
+  deps: TaskDeps
 }
 
-export function postTaskHandler(deps: TaskDeps): Handler {
-  return async ({ req, res }) => {
-    const outcome = await evaluatePostTask(req, deps)
-    match(outcome)
-      .with({ kind: 'created' }, ({ task }) => sendJson(res, 201, task))
-      .with({ kind: 'invalid_json' }, ({ detail }) =>
-        sendProblem(res, 400, 'invalid_json', detail),
-      )
-      .with({ kind: 'invalid_body' }, ({ detail }) =>
-        sendProblem(res, 400, 'invalid_body', detail),
-      )
-      .exhaustive()
-  }
-}
+export const taskRoutes: FastifyPluginAsyncZod<TaskRoutesOptions> = async (
+  app,
+  opts,
+) => {
+  const { deps } = opts
 
-export function getTaskHandler(deps: Pick<TaskDeps, 'repo'>): Handler {
-  return ({ res, params }) => {
-    const id = params['id']
-    if (id === undefined) {
-      return sendProblem(res, 400, 'invalid_path', 'id is required')
-    }
-    const task = getTask(id, deps)
-    if (!task) {
-      return sendProblem(res, 404, 'not_found', `task ${id} not found`)
-    }
-    sendJson(res, 200, task)
-  }
+  app.post(
+    '/tasks',
+    {
+      schema: {
+        body: CreateTaskInputSchema,
+        response: { 201: TaskSchema },
+      },
+    },
+    async (req, reply) => {
+      const task = createTask(req.body, deps)
+      reply.code(201)
+      return task
+    },
+  )
+
+  app.get(
+    '/tasks/:id',
+    {
+      schema: {
+        params: GetTaskParamsSchema,
+        response: { 200: TaskSchema },
+      },
+    },
+    async (req) => {
+      const task = getTask(req.params.id, deps)
+      if (!task) {
+        throw app.httpErrors.notFound(`task ${req.params.id} not found`)
+      }
+      return task
+    },
+  )
 }

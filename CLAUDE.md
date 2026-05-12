@@ -60,6 +60,15 @@ Every test file is split in two:
 - [src/domain/tasks.test.ts](src/domain/tasks.test.ts) + [src/domain/tasks.steps.ts](src/domain/tasks.steps.ts) — pure unit-test shape with `freshDeps()` helper per step.
 - [src/app.test.ts](src/app.test.ts) + [src/app.steps.ts](src/app.steps.ts) — HTTP integration shape with `start_app_server` / `stop_app_server` lifecycle steps.
 
+## Web framework: Fastify with Zod type provider
+
+The HTTP layer is Fastify 5 wired to the existing `src/contracts/` schemas via `@fastify/type-provider-zod`. The framework choice and plugin list track [STACK_DECISIONS.md](STACK_DECISIONS.md).
+
+- Routes are exported as `FastifyPluginAsyncZod` plugins from `src/routes/*.ts`; each declares its schema via `body` / `params` / `response`. Handlers receive typed `req.body` / `req.params` inferred from those Zod schemas — no manual `z.infer` annotations needed at the handler boundary.
+- `buildApp()` in [src/app.ts](src/app.ts) is async (plugin registration is async), composes plugins (`@fastify/sensible` + `@fastify/helmet`), wires routes, and centralises problem+json mapping in `setErrorHandler` / `setNotFoundHandler`.
+- Domain-level 404s throw `app.httpErrors.notFound(...)` from `@fastify/sensible`; the error handler maps `statusCode` to a `type` discriminator (`not_found` vs `route_not_found` vs `bad_request` vs `internal_error`).
+- Tests in [src/app.steps.ts](src/app.steps.ts) drive the server via real `fetch` against a `host: '127.0.0.1', port: 0` listener — implementation-agnostic, survived the Fastify swap without changes.
+
 ## Contracts (`src/contracts/`)
 
 All API resource schemas, request/response shapes, and message envelopes live in `src/contracts/` as Zod schemas with inferred TS types. This is the single source of truth for data crossing the HTTP boundary; everything downstream (routes, domain, future event payloads) imports from here.

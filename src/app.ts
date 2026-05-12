@@ -1,37 +1,130 @@
-import { createServer, type RequestListener, type Server } from 'node:http'
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify'
+import type { FastifySchemaValidationError } from 'fastify/types/schema.d.ts'
 import { randomUUID } from 'node:crypto'
-import { createRouter } from './lib/router.ts'
-import { sendProblem } from './lib/http.ts'
+import sensible from '@fastify/sensible'
+import helmet from '@fastify/helmet'
+import {
+  hasZodFastifySchemaValidationErrors,
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from '@fastify/type-provider-zod'
+import type { Problem } from './contracts/index.ts'
 import { createInMemoryTaskRepo, type TaskDeps } from './domain/tasks.ts'
-import { healthHandler } from './routes/health.ts'
-import { getTaskHandler, postTaskHandler } from './routes/tasks.ts'
+import { healthRoutes } from './routes/health.ts'
+import { taskRoutes } from './routes/tasks.ts'
 
 export type AppOverrides = {
   taskDeps?: TaskDeps
+  loggerEnabled?: boolean
 }
 
-export function buildApp(overrides: AppOverrides = {}): RequestListener {
+const PROBLEM_CONTENT_TYPE = 'application/problem+json'
+
+function detailFromValidation(
+  validation: readonly FastifySchemaValidationError[],
+): string {
+  return validation
+    .map((v) => {
+      const path = (v.instancePath ?? '').replace(/^\//, '').replace(/\//g, '.')
+      const message = v.message ?? 'invalid'
+      return path ? `${path}: ${message}` : message
+    })
+    .join('; ')
+}
+
+function problemFor(err: unknown): { status: number; body: Problem } {
+  if (hasZodFastifySchemaValidationErrors(err)) {
+    return {
+      status: 400,
+      body: {
+        type: 'invalid_body',
+        title: 'invalid body',
+        status: 400,
+        detail: detailFromValidation(err.validation),
+      },
+    }
+  }
+
+  // Fastify guarantees its own thrown errors are FastifyError-shaped; anything
+  // else (a raw string throw, a non-Error object) falls through to the 500 case.
+  const fe = err as FastifyError
+  const message = typeof fe?.message === 'string' ? fe.message : 'unknown error'
+
+  if (fe?.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+    return {
+      status: 400,
+      body: {
+        type: 'invalid_json',
+        title: 'invalid json',
+        status: 400,
+        detail: 'body is not valid JSON',
+      },
+    }
+  }
+
+  const status = fe?.statusCode ?? 500
+  if (status === 404) {
+    return {
+      status,
+      body: { type: 'not_found', title: 'not found', status, detail: message },
+    }
+  }
+  if (status >= 400 && status < 500) {
+    return {
+      status,
+      body: { type: 'bad_request', title: 'bad request', status, detail: message },
+    }
+  }
+  return {
+    status: 500,
+    body: {
+      type: 'internal_error',
+      title: 'internal error',
+      status: 500,
+      detail: message,
+    },
+  }
+}
+
+export async function buildApp(
+  overrides: AppOverrides = {},
+): Promise<FastifyInstance> {
   const taskDeps: TaskDeps = overrides.taskDeps ?? {
     repo: createInMemoryTaskRepo(),
     clock: () => new Date(),
     id: () => randomUUID(),
   }
 
-  const router = createRouter()
-  router.add('GET', '/health', healthHandler)
-  router.add('POST', '/tasks', postTaskHandler(taskDeps))
-  router.add('GET', '/tasks/:id', getTaskHandler(taskDeps))
+  const app = Fastify({
+    logger: overrides.loggerEnabled ?? false,
+    disableRequestLogging: true,
+  }).withTypeProvider<ZodTypeProvider>()
 
-  return async (req, res) => {
-    try {
-      await router.dispatch(req, res)
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : 'unknown error'
-      sendProblem(res, 500, 'internal_error', detail)
+  app.setValidatorCompiler(validatorCompiler)
+  app.setSerializerCompiler(serializerCompiler)
+
+  await app.register(sensible)
+  await app.register(helmet)
+
+  app.setErrorHandler((err, _req, reply) => {
+    const { status, body } = problemFor(err)
+    reply.code(status).type(PROBLEM_CONTENT_TYPE).send(body)
+  })
+
+  app.setNotFoundHandler((req, reply) => {
+    const body: Problem = {
+      type: 'route_not_found',
+      title: 'route not found',
+      status: 404,
+      detail: `no route for ${req.method} ${req.url}`,
     }
-  }
-}
+    reply.code(404).type(PROBLEM_CONTENT_TYPE).send(body)
+  })
 
-export function createApp(overrides: AppOverrides = {}): Server {
-  return createServer(buildApp(overrides))
+  await app.register(healthRoutes)
+  await app.register(taskRoutes, { deps: taskDeps })
+
+  await app.ready()
+  return app
 }
