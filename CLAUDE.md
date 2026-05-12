@@ -87,6 +87,22 @@ Per [STACK_DECISIONS.md](STACK_DECISIONS.md), the runtime database is Postgres a
 - **HTTP integration tests** (`src/app.test.ts`) use **`@testcontainers/postgresql`** — spawns a real `postgres:16-alpine` container shared across the suite via `beforeAll(start_app_server)` / `afterAll(stop_app_server)`. Maximum fidelity to prod.
 - Running tests inside the Docker image (`docker compose run --rm test`) works because the test service mounts `/var/run/docker.sock`; Testcontainers spawns sibling Postgres containers on the host daemon.
 
+## Distributed tracing: OpenTelemetry
+
+The full observability triangle (`reqId` from Fastify, `requestId` from the ALS context, `traceId`/`spanId` from OTel) is wired up via:
+
+- [apps/api/src/telemetry.ts](apps/api/src/telemetry.ts): bootstraps `NodeSDK` at module-load time. Must be the very first import in [apps/api/src/server.ts](apps/api/src/server.ts) so auto-instrumentations patch Node's HTTP module before Fastify is loaded.
+- Exporter is `OTLPTraceExporter` to `OTEL_EXPORTER_OTLP_ENDPOINT` when set, falling back to `ConsoleSpanExporter` (stdout pretty-printed) for local dev.
+- `auto-instrumentations-node` covers Node's `http`, `fastify`, `dns`, `net`, etc. Postgres-js isn't covered (no OTel instrumentation exists for it — Drizzle's own telemetry support is a future step).
+- ESM caveat: programmatic `sdk.start()` works for module-load-hook-based instrumentations that patch their targets eagerly (HTTP, Fastify). Instrumentations relying on import-time hooks (`pg`, `mysql2`) need `NODE_OPTIONS="--import @opentelemetry/auto-instrumentations-node/register"` — we don't use those here.
+
+[packages/server/src/telemetry-mixin.ts](packages/server/src/telemetry-mixin.ts) exports `traceMixin`, a Pino mixin that reads `trace.getActiveSpan()?.spanContext()` and attaches `traceId` + `spanId` to every log line. Built into `defaultLoggerOptions` so any consumer of `@app/server` gets log↔trace correlation for free.
+
+Useful env vars:
+- `OTEL_EXPORTER_OTLP_ENDPOINT` — base URL of your OTLP HTTP collector (Jaeger, Tempo, Honeycomb, etc.). `/v1/traces` is appended.
+- `OTEL_SERVICE_NAME` — defaults to `node-ts-test-api`.
+- `OTEL_SERVICE_VERSION` — defaults to `0.0.0`.
+
 ## Request context (AsyncLocalStorage)
 
 Every Fastify request is bound to an ALS scope via `@fastify/request-context`, seeded with Fastify's own `req.id`. Domain code or other downstream-from-request functions can read it without parameter threading.

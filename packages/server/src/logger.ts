@@ -1,4 +1,5 @@
 import type { FastifyServerOptions } from 'fastify'
+import { traceMixin } from './telemetry-mixin.ts'
 
 export type LoggerEnv = 'development' | 'production' | 'test'
 
@@ -37,6 +38,7 @@ export function defaultLoggerOptions(env: LoggerEnv = 'production'): LoggerOptio
     return {
       level,
       redact,
+      mixin: traceMixin,
       transport: {
         target: 'pino-pretty',
         options: {
@@ -48,5 +50,5 @@ export function defaultLoggerOptions(env: LoggerEnv = 'production'): LoggerOptio
     }
   }
 
-  return { level, redact }
+  return { level, redact, mixin: traceMixin }
 }

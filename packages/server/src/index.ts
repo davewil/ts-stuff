@@ -22,3 +22,4 @@ export {
   getRequestId,
   registerRequestContext,
 } from './request-context.ts'
+export { traceMixin, type TraceMixinFields } from './telemetry-mixin.ts'

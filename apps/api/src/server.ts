@@ -1,3 +1,8 @@
+// Side-effect import: must execute BEFORE any module that loads Fastify or
+// other instrumented libraries, so the OpenTelemetry SDK patches Node's
+// built-in modules in time to capture spans.
+import './telemetry.ts'
+
 import { randomUUID } from 'node:crypto'
 import { defaultLoggerOptions, detectLoggerEnv } from '@app/server'
 import { buildApiApp } from './app.ts'

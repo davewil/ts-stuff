@@ -15,6 +15,12 @@
   "dependencies": {
     "@app/server": "workspace:*",
     "@fastify/type-provider-zod": "^1.0.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.75.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.217.0",
+    "@opentelemetry/resources": "^2.7.1",
+    "@opentelemetry/sdk-node": "^0.217.0",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.8.5",
     "postgres": "^3.4.9",
