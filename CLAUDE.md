@@ -87,6 +87,14 @@ Per [STACK_DECISIONS.md](STACK_DECISIONS.md), the runtime database is Postgres a
 - **HTTP integration tests** (`src/app.test.ts`) use **`@testcontainers/postgresql`** — spawns a real `postgres:16-alpine` container shared across the suite via `beforeAll(start_app_server)` / `afterAll(stop_app_server)`. Maximum fidelity to prod.
 - Running tests inside the Docker image (`docker compose run --rm test`) works because the test service mounts `/var/run/docker.sock`; Testcontainers spawns sibling Postgres containers on the host daemon.
 
+## Request context (AsyncLocalStorage)
+
+Every Fastify request is bound to an ALS scope via `@fastify/request-context`, seeded with Fastify's own `req.id`. Domain code or other downstream-from-request functions can read it without parameter threading.
+
+- [packages/server/src/request-context.ts](packages/server/src/request-context.ts) exposes `getRequestId()` and `getRequestContext()` — both return `undefined` when called outside a request scope, which is the right semantics for unit tests and bootstrap code.
+- `buildApp` registers the plugin and an `onRequest` hook that calls `req.requestContext.set('requestId', req.id)`. Adding more context fields (tenantId, userId) later means augmenting the `RequestContextData` interface and setting them in a subsequent hook.
+- Concurrent requests are isolated by ALS — this is verified by `packages/server/src/request-context.test.ts` which fires two requests in parallel and asserts the bound id differs.
+
 ## Structured logging: Pino via Fastify
 
 Logging is configured at the `@app/server` layer; consumers pass a `logger` option to `buildApp`. Pino is provided transitively by Fastify — we don't import it directly.

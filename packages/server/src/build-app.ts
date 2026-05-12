@@ -10,6 +10,7 @@ import {
 import { healthRoutes } from './health.ts'
 import type { LoggerOption } from './logger.ts'
 import { PROBLEM_CONTENT_TYPE, problemFor, type Problem } from './problem.ts'
+import { registerRequestContext } from './request-context.ts'
 
 export type BuildAppOptions = {
   routes?: readonly FastifyPluginAsyncZod[]
@@ -29,6 +30,7 @@ export async function buildApp(
 
   await app.register(sensible)
   await app.register(helmet)
+  await registerRequestContext(app)
 
   app.setErrorHandler((err, _req, reply) => {
     const { status, body } = problemFor(err)

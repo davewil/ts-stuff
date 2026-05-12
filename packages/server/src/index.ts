@@ -17,3 +17,8 @@ export {
   type LoggerEnv,
   type LoggerOption,
 } from './logger.ts'
+export {
+  getRequestContext,
+  getRequestId,
+  registerRequestContext,
+} from './request-context.ts'
