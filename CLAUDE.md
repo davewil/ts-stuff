@@ -87,6 +87,21 @@ Per [STACK_DECISIONS.md](STACK_DECISIONS.md), the runtime database is Postgres a
 - **HTTP integration tests** (`src/app.test.ts`) use **`@testcontainers/postgresql`** — spawns a real `postgres:16-alpine` container shared across the suite via `beforeAll(start_app_server)` / `afterAll(stop_app_server)`. Maximum fidelity to prod.
 - Running tests inside the Docker image (`docker compose run --rm test`) works because the test service mounts `/var/run/docker.sock`; Testcontainers spawns sibling Postgres containers on the host daemon.
 
+## Structured logging: Pino via Fastify
+
+Logging is configured at the `@app/server` layer; consumers pass a `logger` option to `buildApp`. Pino is provided transitively by Fastify — we don't import it directly.
+
+- [packages/server/src/logger.ts](packages/server/src/logger.ts) exports `defaultLoggerOptions(env)` and `detectLoggerEnv()`. Production emits structured JSON at `info`; development pretty-prints at `debug` via `pino-pretty`; test returns `false` (no logger noise).
+- `LOG_LEVEL` env var overrides the per-env default — useful for production debug spelunking without redeploying.
+- Sensitive headers and common field names are redacted at the logger boundary: `req.headers.authorization`, `req.headers.cookie`, `*.password`, `*.token`, `*.apiKey`. Adding more redactions is the safest place to do it (vs. per-handler).
+- `pino-pretty` is an `apps/api` devDependency; the production Docker image runs with `NODE_ENV=production` so the pretty transport is never loaded and the dep isn't required.
+
+### Logging conventions (per [STACK_DECISIONS.md](STACK_DECISIONS.md))
+
+- **Never `console.log` in app code.** Use `req.log` (request-scoped, includes `req.id`) or `app.log` (instance-scoped).
+- **Pass structured objects, not interpolated strings.** `req.log.info({ taskId }, 'task created')` — never `` req.log.info(`task ${id} created`) ``.
+- **Never log full request bodies.** If correlation is needed, hash the body or log a stable identifier (request id, idempotency key) instead.
+
 ## Web framework: Fastify with Zod type provider
 
 The HTTP layer is Fastify 5 wired to the existing `src/contracts/` schemas via `@fastify/type-provider-zod`. The framework choice and plugin list track [STACK_DECISIONS.md](STACK_DECISIONS.md).

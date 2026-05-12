@@ -11,3 +11,9 @@ export {
   type Problem,
 } from './problem.ts'
 export { healthRoutes } from './health.ts'
+export {
+  defaultLoggerOptions,
+  detectLoggerEnv,
+  type LoggerEnv,
+  type LoggerOption,
+} from './logger.ts'

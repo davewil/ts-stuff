@@ -8,11 +8,12 @@ import {
   type ZodTypeProvider,
 } from '@fastify/type-provider-zod'
 import { healthRoutes } from './health.ts'
+import type { LoggerOption } from './logger.ts'
 import { PROBLEM_CONTENT_TYPE, problemFor, type Problem } from './problem.ts'
 
 export type BuildAppOptions = {
   routes?: readonly FastifyPluginAsyncZod[]
-  loggerEnabled?: boolean
+  logger?: LoggerOption
   mountHealth?: boolean
 }
 
@@ -20,8 +21,7 @@ export async function buildApp(
   opts: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: opts.loggerEnabled ?? false,
-    disableRequestLogging: true,
+    logger: opts.logger ?? false,
   }).withTypeProvider<ZodTypeProvider>()
 
   app.setValidatorCompiler(validatorCompiler)

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { defaultLoggerOptions, detectLoggerEnv } from '@app/server'
 import { buildApiApp } from './app.ts'
 import { createPgClient } from './db/client.ts'
 import { migratePg } from './db/migrate.ts'
@@ -21,7 +22,7 @@ const app = await buildApiApp({
     clock: () => new Date(),
     id: () => randomUUID(),
   },
-  loggerEnabled: true,
+  logger: defaultLoggerOptions(detectLoggerEnv()),
 })
 
 try {

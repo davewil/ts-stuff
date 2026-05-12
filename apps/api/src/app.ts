@@ -5,7 +5,7 @@ import type { TaskDeps } from './domain/tasks.ts'
 
 export type ApiAppOptions = {
   taskDeps: TaskDeps
-  loggerEnabled?: boolean
+  logger?: BuildAppOptions['logger']
 }
 
 export async function buildApiApp(
@@ -13,9 +13,7 @@ export async function buildApiApp(
 ): Promise<FastifyInstance> {
   const serverOpts: BuildAppOptions = {
     routes: [makeTaskRoutes(opts.taskDeps)],
-    ...(opts.loggerEnabled !== undefined
-      ? { loggerEnabled: opts.loggerEnabled }
-      : {}),
+    ...(opts.logger !== undefined ? { logger: opts.logger } : {}),
   }
   return buildApp(serverOpts)
 }
