@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>curl — Comprehensive Cheatsheet</title>
+<link rel="stylesheet" href="cheatsheets/styles.css">
+<style>
+  /* curl syntax token colors */
+  pre .cmd     { color: var(--love); font-weight: 600; }
+  pre .flag    { color: var(--gold); }
+  pre .str     { color: var(--foam); }
+  pre .url     { color: var(--iris); }
+  pre .var     { color: var(--rose); }
+  pre .comment { color: var(--muted); font-style: italic; }
+  pre .op      { color: var(--subtle); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>curl <span class="accent">cheatsheet</span></h1>
+  <p>Comprehensive reference for the URL transfer Swiss-army-knife — Rose Pine theme</p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#basics">Basics</a>
+  <a href="#methods">HTTP methods</a>
+  <a href="#headers">Headers</a>
+  <a href="#data">Request body</a>
+  <a href="#auth">Auth</a>
+  <a href="#download">Download / upload</a>
+  <a href="#cookies">Cookies & sessions</a>
+  <a href="#tls">TLS / certs</a>
+  <a href="#proxy">Proxy & network</a>
+  <a href="#redirects">Redirects & retries</a>
+  <a href="#output">Output & timing</a>
+  <a href="#debug">Debugging</a>
+  <a href="#parallel">Parallel & multi-URL</a>
+  <a href="#config">Config files</a>
+  <a href="#protocols">Other protocols</a>
+  <a href="#recipes">Recipes</a>
+</nav>
+
+<main>
+<div class="grid">
+
+<!-- BASICS -->
+<section class="card" id="basics">
+  <h2><span class="icon">▸</span> Basics</h2>
+
+  <h3>Simplest request</h3>
+<pre><span class="cmd">curl</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Save the response body</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-o</span> <span class="str">page.html</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">-O</span> <span class="url">https://example.com/file.zip</span>  <span class="comment"># use remote filename</span></pre>
+
+  <h3>Silent / quiet</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-sS</span> <span class="url">https://api.example.com</span>  <span class="comment"># silent, but show errors</span></pre>
+
+  <h3>Follow redirects</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-L</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Show only response headers</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-I</span> <span class="url">https://example.com</span>   <span class="comment"># HEAD request</span>
+<span class="cmd">curl</span> <span class="flag">-i</span> <span class="url">https://example.com</span>   <span class="comment"># GET, include headers in output</span>
+<span class="cmd">curl</span> <span class="flag">-D -</span> <span class="url">https://example.com</span>  <span class="comment"># dump headers to stdout</span></pre>
+</section>
+
+<!-- HTTP METHODS -->
+<section class="card" id="methods">
+  <h2><span class="icon">▸</span> HTTP methods</h2>
+
+<pre><span class="cmd">curl</span> <span class="flag">-X GET</span>    <span class="url">https://api.example.com/users</span>
+<span class="cmd">curl</span> <span class="flag">-X POST</span>   <span class="url">https://api.example.com/users</span>
+<span class="cmd">curl</span> <span class="flag">-X PUT</span>    <span class="url">https://api.example.com/users/1</span>
+<span class="cmd">curl</span> <span class="flag">-X PATCH</span>  <span class="url">https://api.example.com/users/1</span>
+<span class="cmd">curl</span> <span class="flag">-X DELETE</span> <span class="url">https://api.example.com/users/1</span>
+<span class="cmd">curl</span> <span class="flag">-X OPTIONS</span> <span class="url">https://api.example.com</span></pre>
+
+  <div class="note"><strong>Tip:</strong> <code class="inline">-X</code> is rarely needed — curl infers the method from <code class="inline">-d</code> (POST), <code class="inline">-T</code> (PUT), <code class="inline">-I</code> (HEAD). Don't combine <code class="inline">-X POST</code> with <code class="inline">-L</code> blindly — redirects may downgrade.</div>
+
+  <h3>HTTP version</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--http1.1</span>      <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--http2</span>        <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--http2-prior-knowledge</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--http3</span>        <span class="url">https://example.com</span>  <span class="comment"># requires HTTP/3 build</span></pre>
+</section>
+
+<!-- HEADERS -->
+<section class="card" id="headers">
+  <h2><span class="icon">▸</span> Headers</h2>
+
+  <h3>Send a header</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-H</span> <span class="str">"Accept: application/json"</span> <span class="url">https://api.example.com</span>
+<span class="cmd">curl</span> <span class="flag">-H</span> <span class="str">"X-Request-Id: abc123"</span> \
+     <span class="flag">-H</span> <span class="str">"User-Agent: my-client/1.0"</span> \
+     <span class="url">https://api.example.com</span></pre>
+
+  <h3>Remove a default header</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-H</span> <span class="str">"Accept:"</span> <span class="url">https://api.example.com</span>  <span class="comment"># empty value removes it</span></pre>
+
+  <h3>Replace a header with empty value</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-H</span> <span class="str">"X-Trace;"</span> <span class="url">https://api.example.com</span>  <span class="comment"># trailing ;  → empty value</span></pre>
+
+  <h3>User-Agent / Referer shortcuts</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-A</span> <span class="str">"Mozilla/5.0"</span>  <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">-e</span> <span class="str">"https://google.com"</span> <span class="url">https://example.com</span></pre>
+</section>
+
+<!-- DATA -->
+<section class="card" id="data">
+  <h2><span class="icon">▸</span> Request body</h2>
+
+  <h3>URL-encoded form (<code class="inline">application/x-www-form-urlencoded</code>)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-d</span> <span class="str">"user=alice&amp;pass=secret"</span> <span class="url">https://example.com/login</span>
+<span class="cmd">curl</span> <span class="flag">--data-urlencode</span> <span class="str">"q=hello world"</span> <span class="url">https://example.com</span></pre>
+
+  <h3>JSON body</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-H</span> <span class="str">"Content-Type: application/json"</span> \
+     <span class="flag">-d</span> <span class="str">'{"name":"alice","age":30}'</span> \
+     <span class="url">https://api.example.com/users</span>
+
+<span class="comment"># curl 7.82+ shorthand:</span>
+<span class="cmd">curl</span> <span class="flag">--json</span> <span class="str">'{"name":"alice"}'</span> <span class="url">https://api.example.com/users</span></pre>
+
+  <div class="note"><strong>Tip:</strong> <code class="inline">--json</code> sets <code class="inline">Content-Type</code> and <code class="inline">Accept</code> to <code class="inline">application/json</code> automatically.</div>
+
+  <h3>Body from a file</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-d</span> <span class="str">"@payload.json"</span> \
+     <span class="flag">-H</span> <span class="str">"Content-Type: application/json"</span> \
+     <span class="url">https://api.example.com</span>
+
+<span class="cmd">curl</span> <span class="flag">--data-binary</span> <span class="str">"@file.bin"</span> <span class="url">https://example.com</span>  <span class="comment"># preserve newlines</span></pre>
+
+  <h3>Multipart form (<code class="inline">multipart/form-data</code>)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-F</span> <span class="str">"name=alice"</span> \
+     <span class="flag">-F</span> <span class="str">"avatar=@./me.png"</span> \
+     <span class="flag">-F</span> <span class="str">"profile=@bio.json;type=application/json"</span> \
+     <span class="url">https://example.com/upload</span></pre>
+
+  <h3>Query string params (URL-encoded)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-G</span> \
+     <span class="flag">--data-urlencode</span> <span class="str">"q=hello world"</span> \
+     <span class="flag">--data-urlencode</span> <span class="str">"page=1"</span> \
+     <span class="url">https://example.com/search</span>
+<span class="comment"># → GET /search?q=hello%20world&amp;page=1</span></pre>
+</section>
+
+<!-- AUTH -->
+<section class="card" id="auth">
+  <h2><span class="icon">▸</span> Authentication</h2>
+
+  <h3>Basic</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-u</span> <span class="str">"alice:secret"</span> <span class="url">https://api.example.com</span>
+<span class="cmd">curl</span> <span class="flag">-u</span> <span class="str">"alice"</span> <span class="url">https://api.example.com</span>  <span class="comment"># prompts for password</span></pre>
+
+  <h3>Bearer token</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-H</span> <span class="str">"Authorization: Bearer $TOKEN"</span> <span class="url">https://api.example.com</span>
+<span class="cmd">curl</span> <span class="flag">--oauth2-bearer</span> <span class="str">"$TOKEN"</span> <span class="url">https://api.example.com</span></pre>
+
+  <h3>Digest, NTLM, Negotiate</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--digest</span>    <span class="flag">-u</span> <span class="str">"user:pass"</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--ntlm</span>      <span class="flag">-u</span> <span class="str">"user:pass"</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--negotiate</span> <span class="flag">-u</span> <span class="str">":"</span>          <span class="url">https://example.com</span>  <span class="comment"># Kerberos / SPNEGO</span></pre>
+
+  <h3>AWS SigV4</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--aws-sigv4</span> <span class="str">"aws:amz:us-east-1:s3"</span> \
+     <span class="flag">-u</span> <span class="str">"$AWS_ACCESS_KEY:$AWS_SECRET_KEY"</span> \
+     <span class="url">https://my-bucket.s3.us-east-1.amazonaws.com/key</span></pre>
+
+  <div class="note danger"><strong>Caution:</strong> Passwords on the CLI leak into shell history and <code class="inline">ps</code>. Prefer <code class="inline">-u user</code> with a password prompt, a <code class="inline">.netrc</code> file, or <code class="inline">--config</code>.</div>
+
+  <h3>.netrc</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--netrc</span>         <span class="url">https://api.example.com</span>
+<span class="cmd">curl</span> <span class="flag">--netrc-file</span> <span class="str">~/.netrc-prod</span> <span class="url">https://api.example.com</span></pre>
+</section>
+
+<!-- DOWNLOAD / UPLOAD -->
+<section class="card" id="download">
+  <h2><span class="icon">▸</span> Download &amp; upload</h2>
+
+  <h3>Resume an interrupted download</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-C -</span> <span class="flag">-O</span> <span class="url">https://example.com/big.iso</span></pre>
+
+  <h3>Limit transfer rate</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--limit-rate</span> <span class="str">200K</span> <span class="flag">-O</span> <span class="url">https://example.com/big.iso</span></pre>
+
+  <h3>Range / partial fetch</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-r</span> <span class="str">0-1023</span> <span class="flag">-o</span> <span class="str">first-1kb.bin</span> <span class="url">https://example.com/file</span></pre>
+
+  <h3>Upload with PUT</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-T</span> <span class="str">./local.txt</span> <span class="url">https://example.com/remote.txt</span>
+<span class="cmd">curl</span> <span class="flag">-T</span> <span class="str">./local.txt</span> <span class="url">sftp://user@host/path/</span></pre>
+
+  <h3>Make missing parent directories (FTP/SFTP)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--ftp-create-dirs</span> <span class="flag">-T</span> <span class="str">file</span> <span class="url">ftp://host/new/dir/</span></pre>
+</section>
+
+<!-- COOKIES -->
+<section class="card" id="cookies">
+  <h2><span class="icon">▸</span> Cookies &amp; sessions</h2>
+
+  <h3>Send cookies</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-b</span> <span class="str">"sid=abc123"</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">-b</span> <span class="str">cookies.txt</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Save received cookies (cookie jar)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-c</span> <span class="str">cookies.txt</span> <span class="url">https://example.com/login</span></pre>
+
+  <h3>Round-trip a session</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-c</span> <span class="str">jar.txt</span> <span class="flag">-d</span> <span class="str">"user=a&amp;pass=b"</span> <span class="url">https://example.com/login</span>
+<span class="cmd">curl</span> <span class="flag">-b</span> <span class="str">jar.txt</span> <span class="flag">-c</span> <span class="str">jar.txt</span> <span class="url">https://example.com/dashboard</span></pre>
+</section>
+
+<!-- TLS -->
+<section class="card" id="tls">
+  <h2><span class="icon">▸</span> TLS / certificates</h2>
+
+  <h3>Skip verification <strong style="color:var(--love)">(dev only!)</strong></h3>
+<pre><span class="cmd">curl</span> <span class="flag">-k</span> <span class="url">https://self-signed.local</span>
+<span class="cmd">curl</span> <span class="flag">--insecure</span> <span class="url">https://self-signed.local</span></pre>
+
+  <h3>Custom CA bundle</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--cacert</span> <span class="str">corp-ca.pem</span> <span class="url">https://internal.corp</span>
+<span class="cmd">curl</span> <span class="flag">--capath</span> <span class="str">/etc/ssl/certs</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Client certificates (mTLS)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--cert</span> <span class="str">client.crt</span> <span class="flag">--key</span> <span class="str">client.key</span> <span class="url">https://mtls.example.com</span>
+<span class="cmd">curl</span> <span class="flag">--cert</span> <span class="str">client.p12:password</span> <span class="flag">--cert-type</span> <span class="str">P12</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Pinning</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--pinnedpubkey</span> <span class="str">"sha256//AAAA....="</span> <span class="url">https://example.com</span></pre>
+
+  <h3>TLS version</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--tlsv1.2</span> <span class="flag">--tls-max</span> <span class="str">1.3</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Show negotiated cipher / cert details</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-vI</span> <span class="url">https://example.com</span> <span class="op">2&gt;&amp;1</span> | grep -E <span class="str">"SSL|TLS|subject|issuer"</span></pre>
+</section>
+
+<!-- PROXY -->
+<section class="card" id="proxy">
+  <h2><span class="icon">▸</span> Proxy &amp; network</h2>
+
+  <h3>HTTP/HTTPS proxy</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-x</span> <span class="url">http://proxy:8080</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--proxy-user</span> <span class="str">"u:p"</span> <span class="flag">-x</span> <span class="url">http://proxy:8080</span> <span class="url">https://example.com</span></pre>
+
+  <h3>SOCKS5</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--socks5</span>          <span class="url">localhost:1080</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--socks5-hostname</span> <span class="url">localhost:1080</span> <span class="url">https://example.com</span>  <span class="comment"># DNS via proxy</span></pre>
+
+  <h3>Force IPv4 / IPv6</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-4</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">-6</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Resolve hostname to fixed IP</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--resolve</span> <span class="str">example.com:443:1.2.3.4</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--connect-to</span> <span class="str">example.com:443:newhost:443</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Bind to interface / source IP</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--interface</span> <span class="str">eth0</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--interface</span> <span class="str">10.0.0.5</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Connect to Unix socket</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--unix-socket</span> <span class="str">/var/run/docker.sock</span> <span class="url">http://localhost/containers/json</span></pre>
+</section>
+
+<!-- REDIRECTS -->
+<section class="card" id="redirects">
+  <h2><span class="icon">▸</span> Redirects &amp; retries</h2>
+
+<pre><span class="cmd">curl</span> <span class="flag">-L</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">-L</span> <span class="flag">--max-redirs</span> <span class="str">5</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">-L</span> <span class="flag">--location-trusted</span> <span class="url">https://example.com</span>  <span class="comment"># resend auth on redirect</span></pre>
+
+  <h3>Retries (network errors / 5xx)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--retry</span> <span class="str">5</span> \
+     <span class="flag">--retry-delay</span> <span class="str">2</span> \
+     <span class="flag">--retry-max-time</span> <span class="str">60</span> \
+     <span class="flag">--retry-all-errors</span> \
+     <span class="url">https://api.example.com</span></pre>
+
+  <h3>Timeouts</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--connect-timeout</span> <span class="str">5</span> \
+     <span class="flag">--max-time</span> <span class="str">30</span> \
+     <span class="url">https://example.com</span></pre>
+
+  <h3>Fail-fast on HTTP errors</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-f</span> <span class="url">https://example.com</span>            <span class="comment"># exit 22 on 4xx/5xx, hide body</span>
+<span class="cmd">curl</span> <span class="flag">--fail-with-body</span> <span class="url">https://example.com</span>  <span class="comment"># same, but keep body</span></pre>
+</section>
+
+<!-- OUTPUT -->
+<section class="card" id="output">
+  <h2><span class="icon">▸</span> Output &amp; timing</h2>
+
+  <h3>Get just the HTTP status code</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-o</span> <span class="str">/dev/null</span> <span class="flag">-s</span> <span class="flag">-w</span> <span class="str">"%{http_code}\n"</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Full timing breakdown</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-o</span> <span class="str">/dev/null</span> <span class="flag">-s</span> <span class="flag">-w</span> <span class="str">"\
+dns:      %{time_namelookup}s\n\
+connect:  %{time_connect}s\n\
+tls:      %{time_appconnect}s\n\
+ttfb:     %{time_starttransfer}s\n\
+total:    %{time_total}s\n\
+size:     %{size_download} bytes\n\
+status:   %{http_code}\n"</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Useful <code class="inline">-w</code> variables</h3>
+  <table>
+    <tr><th>Variable</th><th>Meaning</th></tr>
+    <tr><td><code>%{http_code}</code></td><td>response status</td></tr>
+    <tr><td><code>%{url_effective}</code></td><td>final URL after redirects</td></tr>
+    <tr><td><code>%{redirect_url}</code></td><td>next URL when redirecting</td></tr>
+    <tr><td><code>%{remote_ip}</code></td><td>resolved peer IP</td></tr>
+    <tr><td><code>%{ssl_verify_result}</code></td><td>0 = ok</td></tr>
+    <tr><td><code>%{size_download}</code></td><td>bytes received</td></tr>
+    <tr><td><code>%{speed_download}</code></td><td>bytes/sec</td></tr>
+    <tr><td><code>%{json}</code></td><td>all timing fields as JSON (7.70+)</td></tr>
+  </table>
+</section>
+
+<!-- DEBUG -->
+<section class="card" id="debug">
+  <h2><span class="icon">▸</span> Debugging</h2>
+
+<pre><span class="cmd">curl</span> <span class="flag">-v</span>  <span class="url">https://example.com</span>  <span class="comment"># verbose</span>
+<span class="cmd">curl</span> <span class="flag">-vv</span> <span class="url">https://example.com</span>  <span class="comment"># even more</span>
+<span class="cmd">curl</span> <span class="flag">--trace</span>       <span class="str">trace.log</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--trace-ascii</span> <span class="str">trace.log</span> <span class="url">https://example.com</span>
+<span class="cmd">curl</span> <span class="flag">--trace-time</span>  <span class="flag">-v</span> <span class="url">https://example.com</span>  <span class="comment"># prepend timestamps</span></pre>
+
+  <h3>Show DNS resolution path</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--trace-config</span> <span class="str">all</span> <span class="flag">-v</span> <span class="url">https://example.com</span></pre>
+
+  <h3>Show curl version &amp; protocols</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--version</span>
+<span class="cmd">curl-config</span> <span class="flag">--features</span></pre>
+
+  <div class="note"><strong>Pro tip:</strong> Browser DevTools → right-click any request → <em>Copy as cURL</em>. Replays the exact request from your terminal — invaluable for debugging API issues.</div>
+</section>
+
+<!-- PARALLEL -->
+<section class="card" id="parallel">
+  <h2><span class="icon">▸</span> Parallel &amp; multi-URL</h2>
+
+  <h3>Multiple URLs in one invocation</h3>
+<pre><span class="cmd">curl</span> <span class="url">https://example.com/1</span> <span class="url">https://example.com/2</span></pre>
+
+  <h3>Parallel (curl 7.66+)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-Z</span> <span class="flag">--parallel-max</span> <span class="str">10</span> \
+     <span class="url">https://example.com/[1-100].json</span> \
+     <span class="flag">-o</span> <span class="str">"out/#1.json"</span></pre>
+
+  <h3>URL globbing</h3>
+<pre><span class="cmd">curl</span> <span class="url">https://example.com/file[1-5].txt</span> <span class="flag">-O</span>
+<span class="cmd">curl</span> <span class="url">https://example.com/{red,green,blue}.png</span> <span class="flag">-O</span>
+<span class="cmd">curl</span> <span class="url">https://example.com/page[1-100:2].html</span> <span class="flag">-O</span>  <span class="comment"># step 2</span></pre>
+
+  <h3>Disable globbing (URL has literal brackets)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-g</span> <span class="url">"https://example.com/[literal]"</span></pre>
+</section>
+
+<!-- CONFIG -->
+<section class="card" id="config">
+  <h2><span class="icon">▸</span> Config files &amp; env</h2>
+
+  <h3>~/.curlrc (auto-loaded)</h3>
+<pre><span class="comment"># Lines are long-option-name = value</span>
+<span class="flag">user-agent</span> <span class="op">=</span> <span class="str">"my-cli/1.0"</span>
+<span class="flag">connect-timeout</span> <span class="op">=</span> <span class="str">10</span>
+<span class="flag">retry</span> <span class="op">=</span> <span class="str">3</span>
+<span class="flag">silent</span></pre>
+
+  <h3>Per-call config</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-K</span> <span class="str">request.curl</span></pre>
+
+  <p><code class="inline">request.curl</code>:</p>
+<pre><span class="flag">url</span> <span class="op">=</span> <span class="str">"https://api.example.com/users"</span>
+<span class="flag">request</span> <span class="op">=</span> <span class="str">"POST"</span>
+<span class="flag">header</span> <span class="op">=</span> <span class="str">"Content-Type: application/json"</span>
+<span class="flag">data</span> <span class="op">=</span> <span class="str">'{"name":"alice"}'</span></pre>
+
+  <h3>Useful env vars</h3>
+  <table>
+    <tr><th>Var</th><th>Effect</th></tr>
+    <tr><td><code>HTTP_PROXY</code> / <code>HTTPS_PROXY</code></td><td>per-scheme proxy</td></tr>
+    <tr><td><code>NO_PROXY</code></td><td>comma-sep hosts to bypass</td></tr>
+    <tr><td><code>CURL_HOME</code></td><td>override ~/.curlrc dir</td></tr>
+    <tr><td><code>CURL_SSL_BACKEND</code></td><td>e.g. <code>openssl</code>, <code>secure-transport</code></td></tr>
+    <tr><td><code>SSLKEYLOGFILE</code></td><td>dump TLS keys for Wireshark</td></tr>
+  </table>
+</section>
+
+<!-- PROTOCOLS -->
+<section class="card" id="protocols">
+  <h2><span class="icon">▸</span> Other protocols</h2>
+
+  <h3>FTP / FTPS</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-u</span> <span class="str">"user:pass"</span> <span class="url">ftp://ftp.example.com/dir/</span>
+<span class="cmd">curl</span> <span class="flag">-u</span> <span class="str">"user:pass"</span> <span class="flag">-T</span> <span class="str">file.zip</span> <span class="url">ftp://ftp.example.com/uploads/</span>
+<span class="cmd">curl</span> <span class="flag">--ssl-reqd</span> <span class="url">ftp://ftp.example.com</span>  <span class="comment"># require TLS</span></pre>
+
+  <h3>SFTP / SCP</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-u</span> <span class="str">"user:"</span> <span class="flag">--key</span> <span class="str">~/.ssh/id_ed25519</span> <span class="url">sftp://host/path/</span>
+<span class="cmd">curl</span> <span class="flag">-u</span> <span class="str">"user:"</span> <span class="url">scp://host:22/etc/hostname</span></pre>
+
+  <h3>SMTP (send email)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--ssl-reqd</span> \
+     <span class="flag">--url</span>      <span class="url">smtps://smtp.example.com:465</span> \
+     <span class="flag">--user</span>     <span class="str">"alice@ex.com:pw"</span> \
+     <span class="flag">--mail-from</span> <span class="str">alice@ex.com</span> \
+     <span class="flag">--mail-rcpt</span> <span class="str">bob@ex.com</span> \
+     <span class="flag">--upload-file</span> <span class="str">message.eml</span></pre>
+
+  <h3>IMAP</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-u</span> <span class="str">"alice:pw"</span> <span class="url">imaps://imap.example.com/INBOX</span>      <span class="comment"># list</span>
+<span class="cmd">curl</span> <span class="flag">-u</span> <span class="str">"alice:pw"</span> <span class="url">"imaps://imap.example.com/INBOX;UID=42"</span> <span class="comment"># fetch</span></pre>
+
+  <h3>WebSocket (curl 7.86+)</h3>
+<pre><span class="cmd">curl</span> <span class="flag">--include</span> \
+     <span class="flag">-H</span> <span class="str">"Sec-WebSocket-Version: 13"</span> \
+     <span class="url">wss://echo.example.com</span></pre>
+
+  <h3>MQTT, DICT, LDAP, TFTP, GOPHER</h3>
+<pre><span class="cmd">curl</span> <span class="url">dict://dict.org/d:curl</span>
+<span class="cmd">curl</span> <span class="url">mqtt://broker.example.com/topic</span>
+<span class="cmd">curl</span> <span class="url">ldap://ldap.example.com/dc=example,dc=com</span></pre>
+</section>
+
+<!-- RECIPES -->
+<section class="card" id="recipes">
+  <h2><span class="icon">▸</span> Real-world recipes</h2>
+
+  <h3>JSON POST + jq pipeline</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-sS</span> <span class="flag">--json</span> <span class="str">'{"q":"curl"}'</span> <span class="url">https://api.example.com/search</span> <span class="op">|</span> jq <span class="str">'.hits[].title'</span></pre>
+
+  <h3>Token-aware API call</h3>
+<pre><span class="var">TOKEN</span><span class="op">=</span><span class="str">"$(cat ~/.config/myapp/token)"</span>
+<span class="cmd">curl</span> <span class="flag">-sS</span> <span class="flag">--fail-with-body</span> \
+     <span class="flag">-H</span> <span class="str">"Authorization: Bearer $TOKEN"</span> \
+     <span class="flag">-H</span> <span class="str">"Accept: application/json"</span> \
+     <span class="url">https://api.example.com/me</span></pre>
+
+  <h3>Test endpoint health in a script</h3>
+<pre><span class="var">code</span><span class="op">=</span><span class="str">$(curl -o /dev/null -s -w "%{http_code}" --max-time 5 https://api.example.com/health)</span>
+<span class="cmd">if</span> <span class="op">[</span> <span class="str">"$code"</span> <span class="op">!= </span><span class="str">"200"</span> <span class="op">]</span><span class="comment">; then</span>
+  <span class="cmd">echo</span> <span class="str">"unhealthy: $code"</span> <span class="op">&gt;&amp;2</span>
+  <span class="cmd">exit</span> <span class="str">1</span>
+<span class="cmd">fi</span></pre>
+
+  <h3>Mirror a static site</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-O</span> <span class="url">https://example.com/index.html</span>
+<span class="comment"># for real mirroring use wget; curl has no recursive mode</span></pre>
+
+  <h3>Test redirect chain</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-sIL</span> <span class="flag">-o</span> <span class="str">/dev/null</span> <span class="flag">-w</span> <span class="str">"%{http_code} → %{url_effective}\n"</span> \
+     <span class="url">https://bit.ly/abc</span></pre>
+
+  <h3>Reproduce a flaky request</h3>
+<pre><span class="cmd">for</span> i <span class="cmd">in</span> {1..50}<span class="comment">; do</span>
+  <span class="cmd">curl</span> <span class="flag">-o</span> <span class="str">/dev/null</span> <span class="flag">-s</span> <span class="flag">-w</span> <span class="str">"%{http_code} %{time_total}s\n"</span> \
+       <span class="url">https://api.example.com/v1/widgets</span>
+<span class="cmd">done</span> <span class="op">|</span> sort <span class="op">|</span> uniq -c</pre>
+
+  <h3>Capture TLS keys for Wireshark</h3>
+<pre><span class="var">SSLKEYLOGFILE</span><span class="op">=</span><span class="str">/tmp/keys.log</span> <span class="cmd">curl</span> <span class="url">https://example.com</span></pre>
+
+  <h3>OAuth2 client_credentials grant</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-sS</span> <span class="flag">-X POST</span> <span class="url">https://auth.example.com/oauth/token</span> \
+     <span class="flag">-u</span> <span class="str">"$CLIENT_ID:$CLIENT_SECRET"</span> \
+     <span class="flag">-d</span> <span class="str">"grant_type=client_credentials"</span> \
+     <span class="flag">-d</span> <span class="str">"scope=read:widgets"</span> <span class="op">|</span> jq -r <span class="str">.access_token</span></pre>
+
+  <h3>GitHub API: list your repos</h3>
+<pre><span class="cmd">curl</span> <span class="flag">-sS</span> \
+     <span class="flag">-H</span> <span class="str">"Accept: application/vnd.github+json"</span> \
+     <span class="flag">-H</span> <span class="str">"Authorization: Bearer $GH_TOKEN"</span> \
+     <span class="url">https://api.github.com/user/repos?per_page=100</span></pre>
+</section>
+
+</div>
+</main>
+
+<footer>
+  curl cheatsheet · Rose Pine theme · palette from <a href="https://rosepinetheme.com">rosepinetheme.com</a> · <code class="inline">man curl</code> is the authoritative reference
+</footer>
+
+<script src="cheatsheets/app.js"></script>
+
+</body>
+</html>

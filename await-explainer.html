@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>await — how it fits the event loop, and migration traps</title>
+<link rel="stylesheet" href="cheatsheets/styles.css">
+<style>
+  /* JS syntax token colors */
+  pre .kw   { color: var(--iris); font-weight: 600; }
+  pre .bi   { color: var(--foam); }
+  pre .fn   { color: var(--rose); }
+  pre .str  { color: var(--gold); }
+  pre .num  { color: var(--rose); }
+  pre .com  { color: var(--muted); font-style: italic; }
+  pre .op   { color: var(--subtle); }
+  pre .out  { color: var(--pine); font-weight: 700; }
+  pre .bad  { color: var(--love); }
+  pre .good { color: var(--pine); }
+
+  /* Wrong vs right comparison */
+  .compare {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.7rem;
+    margin: 0.5rem 0 0.7rem;
+  }
+  .compare > div {
+    background: var(--overlay);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.88rem;
+  }
+  .compare .wrong { border-left: 3px solid var(--love); }
+  .compare .right { border-left: 3px solid var(--pine); }
+  .compare h4 {
+    margin: 0 0 0.35rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .compare .wrong h4 { color: var(--love); }
+  .compare .right h4 { color: var(--pine); }
+  .compare pre {
+    margin: 0.2rem 0 0.3rem;
+    background: var(--base);
+    font-size: 0.85em;
+  }
+
+  /* Section badge */
+  .trap {
+    display: inline-block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--overlay);
+    color: var(--love);
+    border: 1px solid var(--love);
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-family: "JetBrains Mono", monospace;
+    margin-right: 0.4rem;
+  }
+  .trap.win { color: var(--pine); border-color: var(--pine); }
+  .trap.list { color: var(--iris); border-color: var(--iris); }
+
+  /* Timeline diagram */
+  pre.timeline {
+    line-height: 1.4;
+    color: var(--subtle);
+  }
+  pre.timeline .t1 { color: var(--gold); }
+  pre.timeline .t2 { color: var(--foam); }
+  pre.timeline .wait { color: var(--muted); }
+  pre.timeline .arrow { color: var(--rose); }
+
+  /* Checklist */
+  ol.checklist {
+    padding-left: 0;
+    list-style: none;
+    counter-reset: chk;
+  }
+  ol.checklist > li {
+    counter-increment: chk;
+    position: relative;
+    padding: 0.35rem 0 0.35rem 2.2rem;
+    border-bottom: 1px solid var(--highlight-low);
+  }
+  ol.checklist > li:last-child { border-bottom: 0; }
+  ol.checklist > li::before {
+    content: counter(chk);
+    position: absolute;
+    left: 0;
+    top: 0.35rem;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 50%;
+    background: var(--overlay);
+    color: var(--gold);
+    border: 1px solid var(--highlight-med);
+    text-align: center;
+    line-height: 1.7rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="accent">await</span> — how it fits</h1>
+  <p>Where <code class="inline">await</code> sits in the event-loop picture, and the traps to watch for when migrating from explicit <code class="inline">.then</code> chains. <a class="inline-docs" href="js-q-explainer.html">← Part 1</a> · <a class="inline-docs" href="js-q-2-explainer.html">← Part 2</a></p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#model">Mental model</a>
+  <a href="#boundary">Microtask boundary</a>
+  <a href="#parallel">Lost parallelism</a>
+  <a href="#loops">forEach &amp; loops</a>
+  <a href="#fireforget">Fire-and-forget</a>
+  <a href="#returnawait">return await</a>
+  <a href="#shape">First-await shape</a>
+  <a href="#args">Argument eagerness</a>
+  <a href="#nonthenable">await non-thenable</a>
+  <a href="#flooding">Microtask flooding</a>
+  <a href="#tla">Top-level await</a>
+  <a href="#wins">What you gain</a>
+  <a href="#checklist">Checklist</a>
+  <a href="#part1-await">Part 1 in await</a>
+  <a href="#part2-await">Part 2 in await</a>
+  <a href="#further">Further reading</a>
+</nav>
+
+<main>
+<div class="grid">
+
+<!-- MENTAL MODEL -->
+<section class="card" id="model">
+  <h2><span class="icon">▸</span> Mental model — what <code class="inline">await</code> compiles to</h2>
+  <p>An <code class="inline">async function</code> is a state machine. The body up to the first <code class="inline">await</code> runs synchronously on the caller's stack. Everything after each <code class="inline">await</code> becomes a continuation handed to a <code class="inline">.then</code>.</p>
+
+  <h3>You write</h3>
+<pre><span class="kw">async function</span> <span class="fn">f</span><span class="op">()</span> <span class="op">{</span>
+  <span class="fn">doSync</span><span class="op">();</span>
+  <span class="kw">const</span> v <span class="op">=</span> <span class="kw">await</span> <span class="fn">slow</span><span class="op">();</span>
+  <span class="fn">useResult</span><span class="op">(</span>v<span class="op">);</span>
+<span class="op">}</span></pre>
+
+  <h3>The engine effectively runs</h3>
+<pre><span class="kw">function</span> <span class="fn">f</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">return</span> <span class="kw">new</span> <span class="bi">Promise</span><span class="op">((</span>resolve<span class="op">,</span> reject<span class="op">)</span> <span class="op">=&gt;</span> <span class="op">{</span>
+    <span class="kw">try</span> <span class="op">{</span>
+      <span class="fn">doSync</span><span class="op">();</span>                          <span class="com">// sync, on caller stack</span>
+      <span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">(</span><span class="fn">slow</span><span class="op">()).</span><span class="fn">then</span><span class="op">((</span>v<span class="op">)</span> <span class="op">=&gt;</span> <span class="op">{</span>
+        <span class="kw">try</span> <span class="op">{</span> <span class="fn">useResult</span><span class="op">(</span>v<span class="op">);</span> <span class="fn">resolve</span><span class="op">();</span> <span class="op">}</span>
+        <span class="kw">catch</span> <span class="op">(</span>e<span class="op">)</span> <span class="op">{</span> <span class="fn">reject</span><span class="op">(</span>e<span class="op">);</span> <span class="op">}</span>
+      <span class="op">},</span> reject<span class="op">);</span>
+    <span class="op">}</span> <span class="kw">catch</span> <span class="op">(</span>e<span class="op">)</span> <span class="op">{</span> <span class="fn">reject</span><span class="op">(</span>e<span class="op">);</span> <span class="op">}</span>
+  <span class="op">});</span>
+<span class="op">}</span></pre>
+
+  <div class="note new"><strong>The takeaway:</strong> every <code class="inline">await</code> is a <code class="inline">.then</code> in disguise. The microtask ordering rules from <a class="inline-docs" href="js-q-explainer.html">Part 1</a> and <a class="inline-docs" href="js-q-2-explainer.html">Part 2</a> apply verbatim. The syntax is nicer; the runtime semantics are identical.</div>
+</section>
+
+<!-- BOUNDARY -->
+<section class="card" id="boundary">
+  <h2><span class="icon">▸</span> Every <code class="inline">await</code> is a microtask boundary</h2>
+  <p>Each <code class="inline">await</code> costs at least one microtask tick — even on already-resolved values. Calling an async function returns immediately; the body runs in pieces separated by these boundaries.</p>
+
+<pre><span class="kw">async function</span> <span class="fn">f</span><span class="op">()</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'1'</span><span class="op">);</span>            <span class="com">// runs on caller stack</span>
+  <span class="kw">await</span> <span class="num">0</span><span class="op">;</span>                       <span class="com">// ───── BOUNDARY 1 ─────</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'2'</span><span class="op">);</span>            <span class="com">// microtask M_a</span>
+  <span class="kw">await</span> <span class="num">0</span><span class="op">;</span>                       <span class="com">// ───── BOUNDARY 2 ─────</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'3'</span><span class="op">);</span>            <span class="com">// microtask M_b</span>
+<span class="op">}</span>
+<span class="fn">f</span><span class="op">();</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'caller'</span><span class="op">);</span>            <span class="com">// runs before M_a — caller wins</span>
+<span class="com">// Output: 1 caller 2 3</span></pre>
+
+  <h3>Rough timeline</h3>
+<pre class="timeline">stack:    <span class="t1">[f starts] [log 1]</span> <span class="t2">[log caller]</span>
+microQ:                       <span class="arrow">→</span> <span class="t1">[continue f: log 2]</span> <span class="arrow">→</span> <span class="t1">[continue f: log 3]</span>
+time:     ────────────────────────────────────────────────────────────►</pre>
+
+  <div class="note"><strong>Cost in hot paths:</strong> three awaits in a tight loop body = three microtask ticks per iteration. For 100k iterations that's 300k ticks. Usually fine. Becomes a problem if any of them yields nothing useful — at which point you should ask whether you needed <code class="inline">async</code> at all.</div>
+</section>
+
+<!-- PARALLEL -->
+<section class="card" id="parallel">
+  <h2><span class="icon">▸</span> <span class="trap">trap #1</span> Lost parallelism</h2>
+  <p>The most common migration regression. Two independent calls that <em>used</em> to run in parallel become serial because each <code class="inline">await</code> waits before the next call even starts.</p>
+
+  <div class="compare">
+    <div class="wrong">
+      <h4>Naïve await migration — sequential, slow</h4>
+<pre><span class="kw">const</span> user <span class="op">=</span> <span class="kw">await</span> <span class="fn">fetchUser</span><span class="op">(</span>id<span class="op">);</span>
+<span class="kw">const</span> orders <span class="op">=</span> <span class="kw">await</span> <span class="fn">fetchOrders</span><span class="op">(</span>id<span class="op">);</span>
+<span class="kw">return</span> <span class="op">{</span> user<span class="op">,</span> orders <span class="op">};</span>
+<span class="com">// time: ─fetchUser─►─fetchOrders─►</span></pre>
+    </div>
+    <div class="right">
+      <h4>Correct — parallel, fast</h4>
+<pre><span class="kw">const</span> <span class="op">[</span>user<span class="op">,</span> orders<span class="op">]</span> <span class="op">=</span> <span class="kw">await</span> <span class="bi">Promise</span><span class="op">.</span><span class="fn">all</span><span class="op">([</span>
+  <span class="fn">fetchUser</span><span class="op">(</span>id<span class="op">),</span>
+  <span class="fn">fetchOrders</span><span class="op">(</span>id<span class="op">),</span>
+<span class="op">]);</span>
+<span class="com">// time: ─fetchUser─►
+//       ─fetchOrders─►</span></pre>
+    </div>
+  </div>
+
+  <h3>Alternative: lift the calls, await later</h3>
+<pre><span class="kw">const</span> userP   <span class="op">=</span> <span class="fn">fetchUser</span><span class="op">(</span>id<span class="op">);</span>     <span class="com">// starts now</span>
+<span class="kw">const</span> ordersP <span class="op">=</span> <span class="fn">fetchOrders</span><span class="op">(</span>id<span class="op">);</span>   <span class="com">// starts now, in parallel</span>
+<span class="kw">const</span> user   <span class="op">=</span> <span class="kw">await</span> userP<span class="op">;</span>          <span class="com">// then wait</span>
+<span class="kw">const</span> orders <span class="op">=</span> <span class="kw">await</span> ordersP<span class="op">;</span>        <span class="com">// already in flight</span></pre>
+
+  <div class="note danger"><strong>Heuristic:</strong> when migrating, for every <code class="inline">await</code> you write, ask: "is the next line dependent on this result?" If no — you've serialised something that didn't need to be.</div>
+</section>
+
+<!-- LOOPS -->
+<section class="card" id="loops">
+  <h2><span class="icon">▸</span> <span class="trap">trap #2</span> <code class="inline">forEach</code> doesn't await</h2>
+  <p><code class="inline">Array.prototype.forEach</code> doesn't know about promises — it discards the return value of its callback. Async callbacks fire-and-forget.</p>
+
+  <div class="compare">
+    <div class="wrong">
+      <h4>Silently broken</h4>
+<pre>items<span class="op">.</span><span class="fn">forEach</span><span class="op">(</span><span class="kw">async</span> <span class="op">(</span>item<span class="op">)</span> <span class="op">=&gt;</span> <span class="op">{</span>
+  <span class="kw">await</span> <span class="fn">process</span><span class="op">(</span>item<span class="op">);</span>
+<span class="op">});</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'done'</span><span class="op">);</span>  <span class="com">// fires BEFORE process() completes</span></pre>
+    </div>
+    <div class="right">
+      <h4>Sequential</h4>
+<pre><span class="kw">for</span> <span class="op">(</span><span class="kw">const</span> item <span class="kw">of</span> items<span class="op">)</span> <span class="op">{</span>
+  <span class="kw">await</span> <span class="fn">process</span><span class="op">(</span>item<span class="op">);</span>
+<span class="op">}</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'done'</span><span class="op">);</span></pre>
+    </div>
+    <div class="right">
+      <h4>Parallel + awaited</h4>
+<pre><span class="kw">await</span> <span class="bi">Promise</span><span class="op">.</span><span class="fn">all</span><span class="op">(</span>
+  items<span class="op">.</span><span class="fn">map</span><span class="op">((</span>i<span class="op">)</span> <span class="op">=&gt;</span> <span class="fn">process</span><span class="op">(</span>i<span class="op">))</span>
+<span class="op">);</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'done'</span><span class="op">);</span></pre>
+    </div>
+  </div>
+
+  <h3>Async iterators: <code class="inline">for await ... of</code></h3>
+<pre><span class="kw">for await</span> <span class="op">(</span><span class="kw">const</span> chunk <span class="kw">of</span> stream<span class="op">)</span> <span class="op">{</span>
+  <span class="fn">process</span><span class="op">(</span>chunk<span class="op">);</span>
+<span class="op">}</span></pre>
+  <p>Works on anything implementing <code class="inline">Symbol.asyncIterator</code> — Node streams, async generators, async-iterable libraries.</p>
+
+  <div class="note danger"><strong>Same trap, other methods:</strong> <code class="inline">.map</code>, <code class="inline">.filter</code>, <code class="inline">.reduce</code>, <code class="inline">.find</code> with async callbacks return arrays of promises, not arrays of resolved values. Wrap in <code class="inline">Promise.all</code> if you need the values, or use a for-loop for sequencing.</div>
+</section>
+
+<!-- FIRE AND FORGET -->
+<section class="card" id="fireforget">
+  <h2><span class="icon">▸</span> <span class="trap">trap #3</span> Fire-and-forget rejections</h2>
+  <p>Every promise created must be awaited or have a <code class="inline">.catch</code> attached. Otherwise its rejection becomes an unhandled rejection — logged by Node, eventually crashing the process under default <code class="inline">--unhandled-rejections=throw</code>.</p>
+
+  <div class="compare">
+    <div class="wrong">
+      <h4>Leaks rejection</h4>
+<pre><span class="kw">async function</span> <span class="fn">leaks</span><span class="op">()</span> <span class="op">{</span>
+  <span class="fn">fetchUser</span><span class="op">();</span>          <span class="com">// not awaited!</span>
+<span class="op">}</span></pre>
+    </div>
+    <div class="right">
+      <h4>Awaited</h4>
+<pre><span class="kw">async function</span> <span class="fn">safe</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">await</span> <span class="fn">fetchUser</span><span class="op">();</span>
+<span class="op">}</span></pre>
+    </div>
+    <div class="right">
+      <h4>Explicit fire-and-forget</h4>
+<pre><span class="kw">function</span> <span class="fn">background</span><span class="op">()</span> <span class="op">{</span>
+  <span class="fn">fetchUser</span><span class="op">().</span><span class="fn">catch</span><span class="op">(</span>logError<span class="op">);</span>
+<span class="op">}</span></pre>
+    </div>
+  </div>
+
+  <div class="note new"><strong>Linter rules to enable:</strong>
+    <ul style="margin: 0.3rem 0 0">
+      <li><code class="inline">@typescript-eslint/no-floating-promises</code> — flags un-awaited promises.</li>
+      <li><code class="inline">@typescript-eslint/no-misused-promises</code> — flags promises in places they shouldn't be (e.g. as a boolean condition).</li>
+      <li><code class="inline">@typescript-eslint/require-await</code> — flags <code class="inline">async</code> functions that never await (often a sign of an accidental async).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- RETURN AWAIT -->
+<section class="card" id="returnawait">
+  <h2><span class="icon">▸</span> <span class="trap">trap #4</span> <code class="inline">return await</code> vs <code class="inline">return</code></h2>
+  <p>Two differences: stack traces and <code class="inline">try/catch</code> boundaries.</p>
+
+  <h3>Inside try/catch — meaningfully different</h3>
+  <div class="compare">
+    <div class="wrong">
+      <h4>Rejection escapes try</h4>
+<pre><span class="kw">async function</span> <span class="fn">f</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">try</span> <span class="op">{</span>
+    <span class="kw">return</span> <span class="fn">mayReject</span><span class="op">();</span>  <span class="com">// NOT caught</span>
+  <span class="op">}</span> <span class="kw">catch</span> <span class="op">(</span>e<span class="op">)</span> <span class="op">{</span>
+    <span class="kw">return</span> <span class="fn">fallback</span><span class="op">();</span>
+  <span class="op">}</span>
+<span class="op">}</span></pre>
+    </div>
+    <div class="right">
+      <h4>Rejection caught locally</h4>
+<pre><span class="kw">async function</span> <span class="fn">f</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">try</span> <span class="op">{</span>
+    <span class="kw">return await</span> <span class="fn">mayReject</span><span class="op">();</span>  <span class="com">// caught here</span>
+  <span class="op">}</span> <span class="kw">catch</span> <span class="op">(</span>e<span class="op">)</span> <span class="op">{</span>
+    <span class="kw">return</span> <span class="fn">fallback</span><span class="op">();</span>
+  <span class="op">}</span>
+<span class="op">}</span></pre>
+    </div>
+  </div>
+
+  <h3>Outside try/catch — stack trace clarity</h3>
+<pre><span class="com">// Functionally identical for the caller:</span>
+<span class="kw">async function</span> <span class="fn">a</span><span class="op">()</span> <span class="op">{</span> <span class="kw">return</span>       <span class="fn">slow</span><span class="op">();</span> <span class="op">}</span>   <span class="com">// a() not in stack trace</span>
+<span class="kw">async function</span> <span class="fn">b</span><span class="op">()</span> <span class="op">{</span> <span class="kw">return await</span> <span class="fn">slow</span><span class="op">();</span> <span class="op">}</span>   <span class="com">// b() in stack trace</span></pre>
+  <p>If <code class="inline">slow()</code> rejects, only <code class="inline">b()</code> stays on the async stack trace — because plain <code class="inline">return promise</code> lets <code class="inline">a</code> return before <code class="inline">slow</code> settles, removing it from the call chain. Modern V8 has removed the historical extra-microtask cost of <code class="inline">return await</code>, so use it freely.</p>
+
+  <div class="note"><strong>Style rule:</strong> always use <code class="inline">return await</code> inside <code class="inline">try/catch</code>; outside, it's a style choice (lean toward <code class="inline">return await</code> for trace clarity).</div>
+</section>
+
+<!-- FIRST AWAIT SHAPE -->
+<section class="card" id="shape">
+  <h2><span class="icon">▸</span> <span class="trap">trap #5</span> The first <code class="inline">await</code> changes the function's "shape"</h2>
+  <p>Code <em>before</em> the first <code class="inline">await</code> runs on the caller's stack. Code <em>after</em> runs on a microtask. This affects error catching.</p>
+
+<pre><span class="kw">async function</span> <span class="fn">f</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">throw new</span> <span class="bi">Error</span><span class="op">(</span><span class="str">'oops'</span><span class="op">);</span>   <span class="com">// before any await</span>
+<span class="op">}</span>
+
+<span class="kw">try</span> <span class="op">{</span>
+  <span class="fn">f</span><span class="op">();</span>                          <span class="com">// throws synchronously? NO</span>
+<span class="op">}</span> <span class="kw">catch</span> <span class="op">(</span>e<span class="op">)</span> <span class="op">{</span>                  <span class="com">// not reached — async function</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'caught'</span><span class="op">,</span> e<span class="op">);</span>     <span class="com">//  converts throws to rejections</span>
+<span class="op">}</span></pre>
+
+  <p>Inside an <code class="inline">async</code> function, every throw — whether it happens before the first await or after — becomes a promise rejection. The synchronous-looking <code class="inline">throw</code> still rejects asynchronously.</p>
+
+<pre><span class="kw">try</span> <span class="op">{</span>
+  <span class="kw">await</span> <span class="fn">f</span><span class="op">();</span>                    <span class="com">// catches both sync and async throws</span>
+<span class="op">}</span> <span class="kw">catch</span> <span class="op">(</span>e<span class="op">)</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'caught'</span><span class="op">,</span> e<span class="op">.</span>message<span class="op">);</span> <span class="com">// 'oops'</span>
+<span class="op">}</span></pre>
+
+  <div class="note danger"><strong>Migration trap:</strong> code that used to throw synchronously (constructors, validators) becomes <code class="inline">async</code> and now rejects. Callers that wrapped the call in a non-await <code class="inline">try/catch</code> silently miss the error.</div>
+</section>
+
+<!-- ARGS -->
+<section class="card" id="args">
+  <h2><span class="icon">▸</span> <span class="trap">trap #6</span> Argument evaluation is eager + left-to-right</h2>
+  <p>Function-call arguments are evaluated one at a time, left to right. <code class="inline">await</code> arguments are no exception: each <code class="inline">await</code> blocks the next argument from starting.</p>
+
+  <div class="compare">
+    <div class="wrong">
+      <h4>Sequential — waits for a() before starting b()</h4>
+<pre><span class="fn">log</span><span class="op">(</span><span class="kw">await</span> <span class="fn">a</span><span class="op">(),</span> <span class="kw">await</span> <span class="fn">b</span><span class="op">());</span>
+<span class="com">// time: ─a─►─b─►</span></pre>
+    </div>
+    <div class="right">
+      <h4>Parallel — both start, then await</h4>
+<pre><span class="kw">const</span> <span class="op">[</span>ra<span class="op">,</span> rb<span class="op">]</span> <span class="op">=</span> <span class="kw">await</span> <span class="bi">Promise</span><span class="op">.</span><span class="fn">all</span><span class="op">([</span><span class="fn">a</span><span class="op">(),</span> <span class="fn">b</span><span class="op">()]);</span>
+<span class="fn">log</span><span class="op">(</span>ra<span class="op">,</span> rb<span class="op">);</span></pre>
+    </div>
+  </div>
+
+  <p>Same trap inside object literals, array literals, JSX attributes — any expression context where multiple awaits are evaluated left-to-right.</p>
+</section>
+
+<!-- NON-THENABLE -->
+<section class="card" id="nonthenable">
+  <h2><span class="icon">▸</span> <span class="trap">trap #7</span> <code class="inline">await</code> on a non-thenable still defers</h2>
+  <p>Spec says <code class="inline">await x</code> ≡ <code class="inline">await Promise.resolve(x)</code>. So awaiting a plain value still costs one microtask tick.</p>
+
+<pre><span class="kw">async function</span> <span class="fn">f</span><span class="op">()</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'1'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="num">42</span><span class="op">;</span>                       <span class="com">// 42 isn't a promise — still yields</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'2'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="fn">f</span><span class="op">();</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'3'</span><span class="op">);</span>
+<span class="com">// Output: 1 3 2</span></pre>
+
+  <h3>Idiomatic use: yielding to the event loop</h3>
+<pre><span class="kw">for</span> <span class="op">(</span><span class="kw">let</span> i <span class="op">=</span> <span class="num">0</span><span class="op">;</span> i <span class="op">&lt;</span> hugeBatch<span class="op">.</span>length<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span>
+  <span class="fn">processItem</span><span class="op">(</span>hugeBatch<span class="op">[</span>i<span class="op">]);</span>
+  <span class="kw">if</span> <span class="op">(</span>i <span class="op">%</span> <span class="num">1000</span> <span class="op">===</span> <span class="num">0</span><span class="op">)</span> <span class="kw">await</span> <span class="num">0</span><span class="op">;</span>      <span class="com">// give timers/IO a turn</span>
+<span class="op">}</span></pre>
+
+  <div class="note"><strong>Caveat:</strong> <code class="inline">await 0</code> only releases to the <em>microtask</em> queue — other microtasks will still beat any macrotask. For true yielding to timers/IO, use <code class="inline">await new Promise(r =&gt; setImmediate(r))</code>.</div>
+</section>
+
+<!-- FLOODING -->
+<section class="card" id="flooding">
+  <h2><span class="icon">▸</span> <span class="trap">trap #8</span> Microtask flooding</h2>
+  <p>Microtasks drain to completion before any macrotask runs. A loop that keeps queueing microtasks — including a long async function with many awaits — can starve setTimeout, I/O callbacks, and HTTP responses.</p>
+
+<pre><span class="kw">async function</span> <span class="fn">processForever</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span>
+    <span class="kw">const</span> item <span class="op">=</span> <span class="fn">getNextItem</span><span class="op">();</span>     <span class="com">// sync</span>
+    <span class="kw">if</span> <span class="op">(!</span>item<span class="op">)</span> <span class="kw">break</span><span class="op">;</span>
+    <span class="kw">await</span> <span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">(</span><span class="fn">handle</span><span class="op">(</span>item<span class="op">));</span> <span class="com">// microtask, but no IO yield</span>
+  <span class="op">}</span>
+<span class="op">}</span>
+<span class="com">// Server handling other requests gets no CPU time —</span>
+<span class="com">// every "await" only releases the microtask queue.</span></pre>
+
+  <h3>The fix: periodic macrotask yields</h3>
+<pre><span class="kw">function</span> <span class="fn">yieldToIO</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">return new</span> <span class="bi">Promise</span><span class="op">((</span>resolve<span class="op">)</span> <span class="op">=&gt;</span> <span class="bi">setImmediate</span><span class="op">(</span>resolve<span class="op">));</span>
+<span class="op">}</span>
+<span class="kw">let</span> count <span class="op">=</span> <span class="num">0</span><span class="op">;</span>
+<span class="kw">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span>
+  <span class="fn">handle</span><span class="op">();</span>
+  <span class="kw">if</span> <span class="op">(++</span>count <span class="op">%</span> <span class="num">100</span> <span class="op">===</span> <span class="num">0</span><span class="op">)</span> <span class="kw">await</span> <span class="fn">yieldToIO</span><span class="op">();</span>
+<span class="op">}</span></pre>
+
+  <div class="note danger"><strong>Symptom in production:</strong> health-check timeouts, slow request handling on a server that "looks idle." Likely cause: a long-running async loop hogging the microtask queue.</div>
+</section>
+
+<!-- TOP LEVEL AWAIT -->
+<section class="card" id="tla">
+  <h2><span class="icon">▸</span> <span class="trap">trap #9</span> Top-level <code class="inline">await</code> serialises module evaluation</h2>
+  <p>ESM modules can <code class="inline">await</code> at the top level. The whole module's <em>evaluation</em> becomes async, and every importer waits for it.</p>
+
+<pre><span class="com">// config.mjs</span>
+<span class="kw">export const</span> config <span class="op">=</span> <span class="kw">await</span> <span class="fn">loadConfig</span><span class="op">();</span>   <span class="com">// blocks all consumers</span></pre>
+
+<pre><span class="com">// caller.mjs</span>
+<span class="kw">import</span> <span class="op">{</span> config <span class="op">}</span> <span class="kw">from</span> <span class="str">'./config.mjs'</span><span class="op">;</span>          <span class="com">// waits for loadConfig</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span>config<span class="op">);</span></pre>
+
+  <ul>
+    <li>Only works in ESM modules — <strong>not</strong> CommonJS (<code class="inline">require</code>).</li>
+    <li>The module graph is evaluated in topological order; any cycle that includes a top-level await throws.</li>
+    <li>A slow top-level await delays every dependent module's initialisation. Use sparingly.</li>
+    <li>Good use: capability detection, dynamic config load, polyfill checks.</li>
+    <li>Bad use: heavy data fetching at import time.</li>
+  </ul>
+</section>
+
+<!-- WHAT YOU GAIN -->
+<section class="card" id="wins">
+  <h2><span class="icon">▸</span> <span class="trap win">wins</span> What you gain from migration</h2>
+  <ul>
+    <li><strong>Readability.</strong> Straight-line code reads like sync code. No nesting, no callback pyramid.</li>
+    <li><strong>Unified error handling.</strong> One <code class="inline">try/catch</code> covers both sync throws and async rejections inside the function — sometimes spanning many awaits.</li>
+    <li><strong>Stack traces.</strong> Modern V8 keeps async frames on the trace ("async stack traces"). <code class="inline">.then</code> callbacks historically lost this — the trace stopped at the platform.</li>
+    <li><strong>Conditional flow.</strong> <code class="inline">if/else</code>, <code class="inline">for</code>, <code class="inline">while</code>, <code class="inline">switch</code> work naturally — no nested <code class="inline">.then(cond ? doA() : doB())</code>.</li>
+    <li><strong>Easier refactors.</strong> Extracting a chunk of code into a helper doesn't require restructuring the entire promise chain.</li>
+    <li><strong>Debugger UX.</strong> Step-over now actually steps over an <code class="inline">await</code>. With <code class="inline">.then</code>, the debugger jumps to the callback registration site, not the resumption.</li>
+  </ul>
+</section>
+
+<!-- CHECKLIST -->
+<section class="card" id="checklist">
+  <h2><span class="icon">▸</span> <span class="trap list">checklist</span> Migration playbook</h2>
+  <ol class="checklist">
+    <li>Find <code class="inline">.then</code> chains with 2+ sequential <code class="inline">.then</code>s — convert to <code class="inline">await</code>. Linear flow becomes linear code.</li>
+    <li>Find <code class="inline">Promise.all([...])</code> — <strong>keep them</strong>. Don't unwrap into sequential awaits.</li>
+    <li>For every new <code class="inline">await</code>, ask "is the next line dependent on this?" If no — lift the call earlier or wrap in <code class="inline">Promise.all</code>.</li>
+    <li>Replace <code class="inline">.catch()</code> with <code class="inline">try/catch</code>. Span the <code class="inline">try</code> over the right scope — not too narrow, not the whole function.</li>
+    <li>Search for <code class="inline">.forEach(async ...)</code>. Convert to <code class="inline">for...of</code> for sequential, <code class="inline">Promise.all(arr.map(...))</code> for parallel.</li>
+    <li>Inside <code class="inline">try/catch</code>, use <code class="inline">return await</code>. Outside, use <code class="inline">return await</code> for stack clarity (no runtime cost on modern V8).</li>
+    <li>Enable linter rules: <code class="inline">no-floating-promises</code>, <code class="inline">no-misused-promises</code>, <code class="inline">require-await</code>.</li>
+    <li>Audit any pre-existing <code class="inline">try { syncFn() }</code> sites: if <code class="inline">syncFn</code> became <code class="inline">async</code>, the catch no longer fires unless you add <code class="inline">await</code>.</li>
+    <li>For long-running loops, add a periodic <code class="inline">await new Promise(r =&gt; setImmediate(r))</code> to avoid microtask flooding.</li>
+    <li>If you introduce top-level await, profile the module graph — slow import startup compounds across consumers.</li>
+  </ol>
+</section>
+
+<!-- PART 1 IN AWAIT -->
+<section class="card" id="part1-await">
+  <h2><span class="icon">▸</span> <a class="inline-docs" href="js-q-explainer.html">Part 1</a> — rewritten with <code class="inline">await</code></h2>
+  <p>The original used <code class="inline">setTimeout</code> + <code class="inline">Promise.then</code> as scheduling primitives. The await version turns each scheduled callback into an <code class="inline">async function</code> body and replaces the primitives with their await equivalents.</p>
+
+<pre><span class="kw">const</span> delay <span class="op">=</span> <span class="op">(</span>ms<span class="op">)</span> <span class="op">=&gt;</span> <span class="kw">new</span> <span class="bi">Promise</span><span class="op">((</span>r<span class="op">)</span> <span class="op">=&gt;</span> <span class="bi">setTimeout</span><span class="op">(</span>r<span class="op">,</span> ms<span class="op">));</span>
+
+<span class="kw">async function</span> <span class="fn">timer1</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">await</span> <span class="fn">delay</span><span class="op">(</span><span class="num">0</span><span class="op">);</span>            <span class="com">// was: setTimeout(..., 0)        — macrotask boundary</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="kw">null</span><span class="op">;</span>                 <span class="com">// was: nested Promise.resolve().then(...) for C</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'C'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="kw">async function</span> <span class="fn">microtask1</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">await</span> <span class="kw">null</span><span class="op">;</span>                 <span class="com">// was: Promise.resolve().then(...)</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'D'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="fn">delay</span><span class="op">(</span><span class="num">0</span><span class="op">);</span>            <span class="com">// was: nested setTimeout(..., 0) for E</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'E'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="kw">async function</span> <span class="fn">microtask2</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">await</span> <span class="kw">null</span><span class="op">;</span>                 <span class="com">// was: Promise.resolve().then(...)</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'F'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="kw">null</span><span class="op">;</span>                 <span class="com">// was: nested Promise.resolve().then(...) for G</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'G'</span><span class="op">);</span>
+<span class="op">}</span>
+
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A'</span><span class="op">);</span>
+<span class="fn">timer1</span><span class="op">();</span>                          <span class="com">// fire-and-forget — mirrors original scheduling</span>
+<span class="fn">microtask1</span><span class="op">();</span>
+<span class="fn">microtask2</span><span class="op">();</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'H'</span><span class="op">);</span></pre>
+
+  <p>Verified output (run via <code class="inline">node</code>): <strong style="color:var(--pine); letter-spacing:0.15em">A H D F G B C E</strong> — identical to the original.</p>
+
+  <h3>Two translation moves</h3>
+  <ul>
+    <li><strong><code class="inline">await delay(0)</code> ≡ <code class="inline">setTimeout(cb, 0)</code></strong>. Both add a timer to the macrotask queue and resume after it fires. The await form costs one extra microtask hop (the timer resolves <code class="inline">delay</code>'s internal promise, which then runs the continuation as a microtask), but that's invisible in this puzzle's output.</li>
+    <li><strong><code class="inline">await null</code> ≡ <code class="inline">Promise.resolve().then(cb)</code></strong>. Spec-wise <code class="inline">await x</code> is <code class="inline">await Promise.resolve(x)</code>, so awaiting any non-thenable forces one microtask boundary.</li>
+  </ul>
+
+  <div class="note new"><strong>Fire-and-forget here is intentional.</strong> The originals are bottom-of-the-file scheduling expressions — they don't wait for completion. To preserve that, we call <code class="inline">timer1()</code>/<code class="inline">microtask1()</code>/<code class="inline">microtask2()</code> without awaiting. In production code, you'd <code class="inline">await Promise.all([...])</code> them or wrap each call in <code class="inline">.catch(logError)</code>.</div>
+</section>
+
+<!-- PART 2 IN AWAIT -->
+<section class="card" id="part2-await">
+  <h2><span class="icon">▸</span> <a class="inline-docs" href="js-q-2-explainer.html">Part 2</a> — rewritten with <code class="inline">await</code></h2>
+  <p>Two sub-puzzles, each translated separately.</p>
+
+  <h3>Puzzle 1 — Promise executor body → async function with no awaits</h3>
+<pre><span class="kw">async function</span> <span class="fn">exec</span><span class="op">()</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'2'</span><span class="op">);</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'3'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'1'</span><span class="op">);</span>
+<span class="fn">exec</span><span class="op">().</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'4'</span><span class="op">));</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'5'</span><span class="op">);</span></pre>
+
+  <p>Output: <strong style="color:var(--pine)">1 2 3 5 4</strong> — identical to the original.</p>
+
+  <div class="note new"><strong>Key insight:</strong> an <code class="inline">async function</code> with <em>no awaits</em> runs its body to completion synchronously on the caller's stack — just like a Promise executor. The wrapper still <em>returns</em> a promise, and attaching <code class="inline">.then(cb)</code> to it queues <code class="inline">cb</code> as a microtask. That's why <code class="inline">'4'</code> still prints after <code class="inline">'5'</code>: the function body is sync, but the <code class="inline">.then</code> is async.</div>
+
+  <h3>Puzzle 2 — chained <code class="inline">.then</code>s → awaits inside async functions</h3>
+<pre><span class="kw">async function</span> <span class="fn">chainA</span><span class="op">()</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A1'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="kw">null</span><span class="op">;</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A2'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="kw">null</span><span class="op">;</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A3'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="kw">async function</span> <span class="fn">chainB</span><span class="op">()</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B1'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="kw">null</span><span class="op">;</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B2'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="kw">null</span><span class="op">;</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B3'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="fn">chainA</span><span class="op">();</span>
+<span class="fn">chainB</span><span class="op">();</span></pre>
+
+  <p>Output: <strong style="color:var(--pine)">A1 B1 A2 B2 A3 B3</strong> — identical to the original. Each <code class="inline">await</code> is a chain step; the two functions interleave at every boundary because they share the microtask queue.</p>
+
+  <h3>A subtle observation when you combine the two</h3>
+  <p>Running both puzzles back-to-back in one file gives <strong style="color:var(--gold)">1 2 3 5 A1 B1 4 A2 B2 A3 B3</strong> — <em>not</em> the original Part 2's combined output (<code class="inline">1 2 3 5 4 A1 B1 A2 B2 A3 B3</code>). Why?</p>
+  <ul>
+    <li>In the original, <code class="inline">Promise.resolve().then(() =&gt; console.log('A1'))</code> queues <code class="inline">A1</code> as a microtask <strong>after</strong> <code class="inline">cb_4</code> is queued. So <code class="inline">4</code> wins the drain.</li>
+    <li>In the await rewrite, <code class="inline">chainA()</code>'s body logs <code class="inline">A1</code> <strong>synchronously</strong> — there's no implicit <code class="inline">Promise.resolve()</code> at the start. So <code class="inline">A1</code>/<code class="inline">B1</code> beat the microtask drain entirely.</li>
+  </ul>
+
+  <p>To make the await version exactly trace-equivalent to the original combined run, add an initial <code class="inline">await null;</code> at the top of <code class="inline">chainA</code> and <code class="inline">chainB</code> — that recreates the leading <code class="inline">Promise.resolve()</code> microtask hop.</p>
+
+  <div class="note danger"><strong>Wider lesson:</strong> "translating" between <code class="inline">.then</code> and <code class="inline">await</code> is usually trace-preserving when each unit is considered alone — but composition can shift ordering. If two parts of your codebase depend on the exact tick at which a value becomes available, migrating one to async/await without the other can introduce subtle races.</div>
+</section>
+
+<!-- FURTHER -->
+<section class="card" id="further">
+  <h2><span class="icon">▸</span> Further reading</h2>
+  <ul>
+    <li><a class="inline-docs" href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function" target="_blank" rel="noopener">MDN — async function</a></li>
+    <li><a class="inline-docs" href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await" target="_blank" rel="noopener">MDN — await operator</a></li>
+    <li><a class="inline-docs" href="https://v8.dev/blog/fast-async" target="_blank" rel="noopener">V8 blog — Faster async functions and promises</a> (covers the <code class="inline">return await</code> + <code class="inline">await</code> optimisations)</li>
+    <li><a class="inline-docs" href="https://jakearchibald.com/2017/await-vs-return-vs-return-await/" target="_blank" rel="noopener">Jake Archibald — await vs return vs return await</a></li>
+    <li><a class="inline-docs" href="https://github.com/tc39/proposal-top-level-await" target="_blank" rel="noopener">TC39 — Top-level await proposal</a></li>
+    <li><a class="inline-docs" href="https://nodejs.org/api/cli.html#--unhandled-rejectionsmode" target="_blank" rel="noopener">Node.js — Unhandled rejection modes</a></li>
+    <li>Previous parts: <a class="inline-docs" href="js-q-explainer.html">Part 1 (timers + microtasks)</a> · <a class="inline-docs" href="js-q-2-explainer.html">Part 2 (executor + chain interleave)</a></li>
+  </ul>
+
+  <div class="note new"><strong>Final exercise:</strong> Predict the output of this snippet without running it. (Answer below.)
+<pre><span class="kw">async function</span> <span class="fn">a</span><span class="op">()</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'a1'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="num">0</span><span class="op">;</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'a2'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="kw">async function</span> <span class="fn">b</span><span class="op">()</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'b1'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="num">0</span><span class="op">;</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'b2'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="fn">a</span><span class="op">();</span> <span class="fn">b</span><span class="op">();</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'sync'</span><span class="op">);</span></pre>
+    <p style="margin: 0.5rem 0 0">Answer: <code class="inline">a1 b1 sync a2 b2</code>. Both async functions run sync up to their first await, then both queue their continuations as microtasks. <code class="inline">'sync'</code> logs while the stack is still busy. Then the microtask queue drains in FIFO order — same interleave pattern as Part 2.</p>
+  </div>
+</section>
+
+</div>
+</main>
+
+<footer>
+  <code class="inline">await</code> explainer · Rose Pine theme · part of the JS event-loop series<br>
+  <a href="js-q-explainer.html">Part 1: timers</a> · <a href="js-q-2-explainer.html">Part 2: executor &amp; chains</a> · <strong style="color:var(--rose)">Part 3: await migration</strong>
+</footer>
+
+<script src="cheatsheets/app.js"></script>
+
+</body>
+</html>

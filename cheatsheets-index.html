@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cheatsheets — TypeScript 6.0 · curl · Rose Pine</title>
+<link rel="stylesheet" href="cheatsheets/styles.css">
+<style>
+  .hero { grid-column: 1 / -1; }
+  .hero h2 { color: var(--rose); font-size: 1.4rem; border-bottom: none; padding-bottom: 0; }
+
+  section.preview h2 a { color: inherit; text-decoration: none; transition: color 0.15s; }
+  section.preview h2 a:hover { color: var(--rose); }
+  section.preview .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--overlay);
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--highlight-med);
+    font-family: "JetBrains Mono", monospace;
+    margin-right: 0.4rem;
+  }
+  section.preview .badge.ts   { color: var(--gold); border-color: var(--gold); }
+  section.preview .badge.curl { color: var(--love); border-color: var(--love); }
+
+  section.preview .open {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.7rem;
+    background: var(--overlay);
+    border: 1px solid var(--highlight-med);
+    border-radius: 6px;
+    color: var(--foam);
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  section.preview .open:hover {
+    background: var(--highlight-med);
+    color: var(--rose);
+    border-color: var(--rose);
+  }
+
+  .res-list { list-style: none; padding: 0; margin: 0.3rem 0; }
+  .res-list li { padding: 0.45rem 0; border-bottom: 1px solid var(--highlight-low); }
+  .res-list li:last-child { border-bottom: 0; }
+  .res-list a { color: var(--foam); text-decoration: none; font-weight: 600; }
+  .res-list a:hover { color: var(--rose); text-decoration: underline; }
+  .res-list .desc { display: block; color: var(--subtle); font-size: 0.85rem; margin-top: 0.15rem; }
+  .res-list .src {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: var(--muted);
+    background: var(--overlay);
+    padding: 0.05rem 0.4rem;
+    border-radius: 3px;
+    margin-left: 0.4rem;
+    font-family: "JetBrains Mono", monospace;
+    vertical-align: middle;
+  }
+
+  pre.tree { color: var(--text); line-height: 1.5; }
+  pre.tree .dir  { color: var(--iris); font-weight: 600; }
+  pre.tree .file { color: var(--foam); }
+  pre.tree .com  { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="accent">Cheatsheets</span> · TypeScript &amp; curl</h1>
+  <p>Two standalone pocket references. Independent of each other and of the <a class="inline-docs" href="event-loop-index.html">JS event-loop series</a>. Pick one — there's no reading order.</p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#about">About</a>
+  <a href="#ts">TypeScript 6.0</a>
+  <a href="#curl">curl</a>
+  <a href="#architecture">How it's built</a>
+  <a href="#resources-ts">TS resources</a>
+  <a href="#resources-curl">curl resources</a>
+  <a href="#tools">Tools</a>
+  <a href="#credits">Credits</a>
+  <a href="event-loop-index.html">→ Event-loop series</a>
+</nav>
+
+<main>
+<div class="grid">
+
+<!-- ABOUT -->
+<section class="card hero" id="about">
+  <h2><span class="icon">▸</span> About these cheatsheets</h2>
+  <p>Two unrelated quick-references that happen to share the Rose Pine theme:</p>
+  <ul>
+    <li><strong>TypeScript 6.0</strong> — 23 sections from primitives through 5.x → 6.0 language features. Every section heading links to the corresponding chapter of the TypeScript Handbook; the "What's new" card has per-version links to each release-notes page (5.0 → 6.0). Verified live against npm at write time.</li>
+    <li><strong>curl</strong> — 16 sections of HTTP-stack recipes covering methods, headers, body forms, auth (Basic / Bearer / Digest / NTLM / SigV4 / .netrc), TLS / mTLS, proxies, retries &amp; timing, cookies &amp; sessions, parallel transfers, and non-HTTP protocols (FTP, SMTP, IMAP, WebSocket, MQTT).</li>
+  </ul>
+
+  <h3>Design principle</h3>
+  <p>Surface-level reference material is everywhere. What's harder to find is reference material that <em>also</em> answers <em>why</em> — why is this option deprecated, what trap does this flag avoid. Each cheatsheet pairs a high-density quick-scan layout with inline notes, warnings, and links to canonical specs.</p>
+
+  <h3>Mechanics</h3>
+  <p>Both pages are fully responsive (1 / 2 / 3 columns by viewport), with a sticky table-of-contents bar on desktop and a hamburger drawer on mobile. They share <code class="inline">cheatsheets/styles.css</code> + <code class="inline">cheatsheets/app.js</code> — no build step, no framework, no dependencies. Print works fine too.</p>
+</section>
+
+<!-- TS -->
+<section class="card preview" id="ts">
+  <h2><span class="badge ts">TS</span> <a href="typescript-cheatsheet.html">TypeScript 6.0 cheatsheet</a></h2>
+  <p>23-section reference for modern TypeScript, with the version verified live from npm. Every section heading links directly to the corresponding chapter of the TypeScript Handbook.</p>
+  <ul>
+    <li>Primitives, objects, arrays, tuples, functions, generics, classes, modules</li>
+    <li>Type vs interface comparison table</li>
+    <li>Discriminated unions, conditional types, mapped types, template literal types</li>
+    <li>All 20+ built-in utility types tabulated (<code class="inline">Partial</code>, <code class="inline">Pick</code>, <code class="inline">Omit</code>, <code class="inline">ReturnType</code>, <code class="inline">NoInfer</code>, …)</li>
+    <li><code class="inline">using</code> resource management, stage-3 decorators, async / Promise types</li>
+    <li>Strict tsconfig family + a Node 24 / TS 6 baseline config</li>
+    <li>Version-by-version changelog with <code class="inline">5.0+</code> / <code class="inline">5.2+</code> / <code class="inline">5.5+</code> feature tags inline, each linking to that release's notes page</li>
+  </ul>
+  <a class="open" href="typescript-cheatsheet.html">Open cheatsheet →</a>
+</section>
+
+<!-- CURL -->
+<section class="card preview" id="curl">
+  <h2><span class="badge curl">curl</span> <a href="curl-cheatsheet.html">curl cheatsheet</a></h2>
+  <p>Comprehensive recipes for the URL-transfer swiss-army-knife — 16 sections covering everything from "show only response headers" to "send mail over SMTP+TLS." Every flag carries a brief inline comment so you don't need a second tab open.</p>
+  <ul>
+    <li>HTTP methods, headers (send / remove / override), body forms (JSON, urlencoded, multipart)</li>
+    <li>Auth: Basic, Bearer, Digest, NTLM, Negotiate, AWS SigV4, .netrc</li>
+    <li>TLS, mTLS, custom CA bundles, pinning, version pinning</li>
+    <li>Proxies (HTTP / HTTPS / SOCKS5), <code class="inline">--resolve</code>, <code class="inline">--connect-to</code>, Unix sockets</li>
+    <li>Retries, timeouts, <code class="inline">-w</code> timing variables, full timing breakdown recipe</li>
+    <li>Cookies, sessions, parallel transfers (<code class="inline">-Z</code>), URL globbing</li>
+    <li>Non-HTTP protocols: FTP, SFTP, SMTP, IMAP, WebSocket, MQTT, LDAP</li>
+    <li>Recipes: token-aware calls, health checks, OAuth2, GitHub API, TLS keylog capture</li>
+  </ul>
+  <a class="open" href="curl-cheatsheet.html">Open cheatsheet →</a>
+</section>
+
+<!-- ARCHITECTURE -->
+<section class="card" id="architecture">
+  <h2><span class="icon">▸</span> How it's built</h2>
+
+<pre class="tree"><span class="dir">node-ts-test/</span>
+├── <span class="file">cheatsheets-index.html</span>      <span class="com">← you are here</span>
+├── <span class="file">typescript-cheatsheet.html</span>
+├── <span class="file">curl-cheatsheet.html</span>
+└── <span class="dir">cheatsheets/</span>
+    ├── <span class="file">styles.css</span>              <span class="com">← shared Rose Pine, responsive grid, burger menu</span>
+    └── <span class="file">app.js</span>                  <span class="com">← shared drawer toggle</span></pre>
+
+  <ul>
+    <li>Each cheatsheet links <code class="inline">cheatsheets/styles.css</code> and <code class="inline">cheatsheets/app.js</code></li>
+    <li>Only file-specific syntax-token colours stay inline (TS uses gold / iris / foam; curl uses love / gold / foam — overlapping class names so they have to remain per-file)</li>
+    <li>Responsive 1 / 2 / 3-col grid driven by <code class="inline">@media</code> at 760 px and 1200 px</li>
+    <li><code class="inline">max-width: min(2400px, 96vw)</code> lets cards fill ultrawide monitors without absurd line lengths</li>
+    <li>Mobile (&lt; 760 px) gets a hamburger drawer with full ARIA states, scroll lock, Escape-to-close, viewport-resize auto-dismiss</li>
+  </ul>
+</section>
+
+<!-- TS RESOURCES -->
+<section class="card" id="resources-ts">
+  <h2><span class="icon">▸</span> Further reading — TypeScript</h2>
+  <ul class="res-list">
+    <li>
+      <a href="https://www.typescriptlang.org/docs/handbook/intro.html" target="_blank" rel="noopener">TypeScript Handbook</a>
+      <span class="src">typescriptlang.org</span>
+      <span class="desc">The canonical learning resource. Start at <em>Everyday Types</em> if you're new; the cheatsheet links to specific chapters from every section heading.</span>
+    </li>
+    <li>
+      <a href="https://www.typescriptlang.org/docs/handbook/release-notes/overview.html" target="_blank" rel="noopener">TypeScript release notes index</a>
+      <span class="src">typescriptlang.org</span>
+      <span class="desc">Every version's changelog. The cheatsheet's "What's new" section links to 5.0 → 6.0 individually.</span>
+    </li>
+    <li>
+      <a href="https://www.typescriptlang.org/tsconfig" target="_blank" rel="noopener">tsconfig reference</a>
+      <span class="src">typescriptlang.org</span>
+      <span class="desc">Every compiler option, searchable. The single most useful TS page in daily work.</span>
+    </li>
+    <li>
+      <a href="https://www.typescriptlang.org/docs/handbook/utility-types.html" target="_blank" rel="noopener">Utility types reference</a>
+      <span class="src">typescriptlang.org</span>
+      <span class="desc">Every built-in: <code class="inline">Partial</code>, <code class="inline">Pick</code>, <code class="inline">Omit</code>, <code class="inline">ReturnType</code>, <code class="inline">NoInfer</code>, …</span>
+    </li>
+    <li>
+      <a href="https://github.com/microsoft/TypeScript" target="_blank" rel="noopener">TypeScript on GitHub</a>
+      <span class="src">github.com</span>
+      <span class="desc">The compiler's source, issue tracker, and wiki — including the "What's new" page that often gets updated before the handbook does.</span>
+    </li>
+  </ul>
+</section>
+
+<!-- CURL RESOURCES -->
+<section class="card" id="resources-curl">
+  <h2><span class="icon">▸</span> Further reading — curl</h2>
+  <ul class="res-list">
+    <li>
+      <a href="https://curl.se/docs/manpage.html" target="_blank" rel="noopener">curl manpage (online)</a>
+      <span class="src">curl.se</span>
+      <span class="desc">Every flag, every option, every example. The cheatsheet covers the 95 % you'll reach for; the manpage covers the rest.</span>
+    </li>
+    <li>
+      <a href="https://curl.se/docs/" target="_blank" rel="noopener">curl documentation hub</a>
+      <span class="src">curl.se</span>
+      <span class="desc">Tutorials, tooling docs (libcurl, curl-config), security notes, and the everything-curl book.</span>
+    </li>
+    <li>
+      <a href="https://everything.curl.dev/" target="_blank" rel="noopener">Everything curl — the book</a>
+      <span class="src">curl.dev</span>
+      <span class="desc">Free, online, comprehensive. Hundreds of pages on how curl and libcurl work. By Daniel Stenberg himself.</span>
+    </li>
+    <li>
+      Local: <code class="inline">man curl</code>
+      <span class="src">terminal</span>
+      <span class="desc">Always available, even offline. The cheatsheet is a useful 30-second scan layer on top.</span>
+    </li>
+  </ul>
+</section>
+
+<!-- TOOLS -->
+<section class="card" id="tools">
+  <h2><span class="icon">▸</span> Tools &amp; sandboxes</h2>
+  <ul class="res-list">
+    <li>
+      <a href="https://www.typescriptlang.org/play" target="_blank" rel="noopener">TypeScript Playground</a>
+      <span class="src">typescriptlang.org</span>
+      <span class="desc">Browser sandbox for trying things out. Type inspection, error messages, and JS emit side-by-side. Quick-try anything from the TS cheatsheet without opening a project.</span>
+    </li>
+    <li>
+      <a href="https://httpbin.org" target="_blank" rel="noopener">httpbin.org</a>
+      <span class="src">httpbin.org</span>
+      <span class="desc">Endpoints that echo back your request — great for poking at the curl examples without standing up a server. <code class="inline">/anything</code>, <code class="inline">/headers</code>, <code class="inline">/cookies</code>, <code class="inline">/delay/N</code>, …</span>
+    </li>
+    <li>
+      <a href="https://reqbin.com" target="_blank" rel="noopener">Reqbin</a>
+      <span class="src">reqbin.com</span>
+      <span class="desc">Alternative request inspector / public test endpoints. Useful when httpbin is rate-limiting.</span>
+    </li>
+  </ul>
+</section>
+
+<!-- CREDITS -->
+<section class="card" id="credits">
+  <h2><span class="icon">▸</span> Credits</h2>
+  <ul>
+    <li><strong>Theme:</strong> <a class="inline-docs" href="https://rosepinetheme.com" target="_blank" rel="noopener">Rose Pine</a> — palette by Emilia Dunfelt &amp; contributors. Used in its "Main" variant with the standard role mapping (love, gold, rose, pine, foam, iris).</li>
+    <li><strong>Fonts:</strong> system UI sans for prose; JetBrains Mono / Fira Code / SF Mono / Menlo for code blocks.</li>
+    <li><strong>Validation:</strong> each cheatsheet was checked with Python's <code class="inline">html.parser</code> for unclosed tags.</li>
+  </ul>
+
+  <div class="note new">Looking for the JS event-loop deep-dives? They're in the <a class="inline-docs" href="event-loop-index.html">event-loop series index</a> — three sequential explainers on the call stack / microtask / macrotask interplay and migrating from <code class="inline">.then</code> chains to <code class="inline">await</code>.</div>
+</section>
+
+</div>
+</main>
+
+<footer>
+  Cheatsheets index · Rose Pine theme<br><br>
+  <strong style="color:var(--gold)">Cheatsheets:</strong>
+  <a href="typescript-cheatsheet.html">TypeScript</a> ·
+  <a href="curl-cheatsheet.html">curl</a>
+  &nbsp;|&nbsp;
+  <a href="event-loop-index.html">→ Event-loop series index</a>
+</footer>
+
+<script src="cheatsheets/app.js"></script>
+
+</body>
+</html>

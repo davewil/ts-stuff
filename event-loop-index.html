@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JavaScript event-loop series — three-part deep dive</title>
+<link rel="stylesheet" href="cheatsheets/styles.css">
+<style>
+  .hero { grid-column: 1 / -1; }
+  .hero h2 { color: var(--rose); font-size: 1.4rem; border-bottom: none; padding-bottom: 0; }
+
+  section.preview h2 a { color: inherit; text-decoration: none; transition: color 0.15s; }
+  section.preview h2 a:hover { color: var(--rose); }
+  section.preview .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--overlay);
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--highlight-med);
+    font-family: "JetBrains Mono", monospace;
+    margin-right: 0.4rem;
+  }
+  section.preview .badge.p1 { color: var(--iris); border-color: var(--iris); }
+  section.preview .badge.p2 { color: var(--iris); border-color: var(--iris); }
+  section.preview .badge.p3 { color: var(--pine); border-color: var(--pine); }
+
+  section.preview .answer-line {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.85rem;
+    background: var(--overlay);
+    padding: 0.4rem 0.7rem;
+    border-radius: 4px;
+    border-left: 3px solid var(--pine);
+    color: var(--rose);
+    margin: 0.5rem 0;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  section.preview .answer-line .label { color: var(--muted); margin-right: 0.5em; }
+
+  section.preview .open {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.7rem;
+    background: var(--overlay);
+    border: 1px solid var(--highlight-med);
+    border-radius: 6px;
+    color: var(--foam);
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  section.preview .open:hover {
+    background: var(--highlight-med);
+    color: var(--rose);
+    border-color: var(--rose);
+  }
+
+  .res-list { list-style: none; padding: 0; margin: 0.3rem 0; }
+  .res-list li { padding: 0.45rem 0; border-bottom: 1px solid var(--highlight-low); }
+  .res-list li:last-child { border-bottom: 0; }
+  .res-list a { color: var(--foam); text-decoration: none; font-weight: 600; }
+  .res-list a:hover { color: var(--rose); text-decoration: underline; }
+  .res-list .desc { display: block; color: var(--subtle); font-size: 0.85rem; margin-top: 0.15rem; }
+  .res-list .src {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: var(--muted);
+    background: var(--overlay);
+    padding: 0.05rem 0.4rem;
+    border-radius: 3px;
+    margin-left: 0.4rem;
+    font-family: "JetBrains Mono", monospace;
+    vertical-align: middle;
+  }
+
+  pre.tree { color: var(--text); line-height: 1.5; }
+  pre.tree .dir  { color: var(--iris); font-weight: 600; }
+  pre.tree .file { color: var(--foam); }
+  pre.tree .com  { color: var(--muted); font-style: italic; }
+
+  .progression {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin: 0.5rem 0 0.7rem;
+  }
+  .progression > div {
+    background: var(--overlay);
+    border-radius: 6px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.85rem;
+    text-align: center;
+    border-top: 3px solid var(--iris);
+  }
+  .progression > div:last-child { border-top-color: var(--pine); }
+  .progression .step-n {
+    display: block;
+    color: var(--muted);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem;
+    margin-bottom: 0.2rem;
+  }
+  .progression .step-name {
+    display: block;
+    color: var(--rose);
+    font-weight: 600;
+  }
+  @media (max-width: 759px) {
+    .progression { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="accent">JavaScript event-loop</span> series</h1>
+  <p>Three sequential explainers that build a single mental model of the JS runtime. Independent of the <a class="inline-docs" href="cheatsheets-index.html">cheatsheets</a>. Read Parts 1 → 2 → 3 in order — each builds on the one before.</p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#about">About</a>
+  <a href="#progression">The progression</a>
+  <a href="#p1">Part 1</a>
+  <a href="#p2">Part 2</a>
+  <a href="#p3">Part 3</a>
+  <a href="#architecture">How it's built</a>
+  <a href="#resources">Resources</a>
+  <a href="#tools">Visualisers</a>
+  <a href="#credits">Credits</a>
+  <a href="cheatsheets-index.html">→ Cheatsheets</a>
+</nav>
+
+<main>
+<div class="grid">
+
+<!-- ABOUT -->
+<section class="card hero" id="about">
+  <h2><span class="icon">▸</span> About the series</h2>
+  <p>A three-part progression from "what gets logged in what order" to a full <code class="inline">async</code> / <code class="inline">await</code> migration playbook. The series was written to fix the three most common misconceptions about JavaScript's runtime:</p>
+  <ol>
+    <li>"<code class="inline">setTimeout(fn, 0)</code> runs immediately." (No — it sits behind every pending microtask and any earlier-queued timer.)</li>
+    <li>"<code class="inline">new Promise(...)</code> is async." (The executor body is synchronous; only <code class="inline">.then</code> callbacks are deferred.)</li>
+    <li>"A <code class="inline">.then</code> chain is one deferred unit." (It's N independent microtask queueings — two parallel chains <em>interleave</em>.)</li>
+  </ol>
+
+  <h3>Design principle</h3>
+  <p>Every part pairs a runnable JS source file (<code class="inline">src/js-q.js</code>, <code class="inline">src/js-q-2.js</code>) with an explainer that traces the output character by character. Every trace was verified by running the code with Node 24 and matching against the predicted output. No hand-waving, no "trust me."</p>
+
+  <h3>Mechanics</h3>
+  <p>All three pages are fully responsive (1 / 2 / 3 columns by viewport), with a sticky table-of-contents bar on desktop and a hamburger drawer on mobile. They share <code class="inline">cheatsheets/styles.css</code> + <code class="inline">cheatsheets/app.js</code>. Each part has forward / backward navigation in its header and footer so you can flip between them.</p>
+</section>
+
+<!-- PROGRESSION -->
+<section class="card hero" id="progression">
+  <h2><span class="icon">▸</span> The progression at a glance</h2>
+  <div class="progression">
+    <div>
+      <span class="step-n">PART 1</span>
+      <span class="step-name">Build the model</span>
+      Call stack, microtask queue, macrotask queue, the drain rule. Eight statements, one answer: <strong style="color:var(--rose); font-family:'JetBrains Mono',monospace">A H D F G B C E</strong>.
+    </div>
+    <div>
+      <span class="step-n">PART 2</span>
+      <span class="step-name">Break wrong intuitions</span>
+      Two more puzzles. Promise executors are sync. Chains interleave. Answer: <strong style="color:var(--rose); font-family:'JetBrains Mono',monospace">1 2 3 5 4 A1 B1 A2 B2 A3 B3</strong>.
+    </div>
+    <div>
+      <span class="step-n">PART 3</span>
+      <span class="step-name">Map onto await</span>
+      How <code class="inline">await</code> fits, 9 migration traps, a 10-point checklist, plus Parts 1 &amp; 2 rewritten in <code class="inline">async</code>/<code class="inline">await</code>.
+    </div>
+  </div>
+</section>
+
+<!-- PART 1 -->
+<section class="card preview" id="p1">
+  <h2><span class="badge p1">Part 1</span> <a href="js-q-explainer.html">Event-loop explainer #1</a></h2>
+  <p>Step-by-step trace of an eight-statement program (<code class="inline">src/js-q.js</code>) that mixes <code class="inline">console.log</code>, <code class="inline">setTimeout</code>, and <code class="inline">Promise.then</code> — the classic interview gotcha. Builds the mental model of call stack → microtask queue → macrotask queue from scratch.</p>
+  <div class="answer-line"><span class="label">prints:</span>A H D F G B C E</div>
+  <ul>
+    <li>Phase-by-phase trace with queue-state visualisation cards (stack / micro / macro / output)</li>
+    <li>Why microtasks always beat macrotasks, even when queued later</li>
+    <li>Why microtasks drain <em>greedily</em> — including microtasks queued mid-drain</li>
+    <li>Full 11-row trace table mapping every state transition from start to exit</li>
+    <li>Node-specific notes: <code class="inline">process.nextTick</code>, <code class="inline">setImmediate</code>, event-loop phases</li>
+  </ul>
+  <a class="open" href="js-q-explainer.html">Open Part 1 →</a>
+</section>
+
+<!-- PART 2 -->
+<section class="card preview" id="p2">
+  <h2><span class="badge p2">Part 2</span> <a href="js-q-2-explainer.html">Event-loop explainer #2</a></h2>
+  <p>Two more counter-intuitive puzzles (<code class="inline">src/js-q-2.js</code>) targeting the two most common wrong mental models: "Promise is async magic" and "a <code class="inline">.then</code> chain runs atomically."</p>
+  <div class="answer-line"><span class="label">prints:</span>1 2 3 5 4 A1 B1 A2 B2 A3 B3</div>
+  <ul>
+    <li>The Promise executor body is <strong>synchronous</strong> — including code after <code class="inline">resolve()</code></li>
+    <li>Two parallel <code class="inline">.then</code> chains <strong>interleave</strong> one step at a time, not chain-then-chain</li>
+    <li>Side-by-side "wrong guess" vs "actual output" comparisons</li>
+    <li>Connection to <code class="inline">async</code>/<code class="inline">await</code>: same interleave pattern under the hood</li>
+    <li>Brief tour of V8's "Faster async functions" optimisation (1 tick instead of 2 since V8 7.2)</li>
+  </ul>
+  <a class="open" href="js-q-2-explainer.html">Open Part 2 →</a>
+</section>
+
+<!-- PART 3 -->
+<section class="card preview" id="p3">
+  <h2><span class="badge p3">Part 3</span> <a href="await-explainer.html">await explainer &amp; migration playbook</a></h2>
+  <p>Where <code class="inline">await</code> fits in the event-loop picture, what it compiles down to, and <strong>9 migration traps</strong> to watch for when moving a codebase from explicit <code class="inline">.then</code> chains to <code class="inline">async</code>/<code class="inline">await</code>.</p>
+  <ul>
+    <li>Mental model: side-by-side "you write" vs "the engine effectively runs"</li>
+    <li>The 9 traps — lost parallelism, <code class="inline">forEach</code>+async, fire-and-forget rejections, <code class="inline">return await</code>, first-await shape change, argument eagerness, await on non-thenable, microtask flooding, top-level await</li>
+    <li>What you gain — readability, unified error handling, stack traces, debugger UX</li>
+    <li>A 10-item migration playbook checklist</li>
+    <li><strong>Bonus:</strong> Parts 1 and 2 rewritten in <code class="inline">async</code>/<code class="inline">await</code> with verified output and a teaching note on what shifts when you "translate" — composition can change ordering even when individual units don't</li>
+  </ul>
+  <a class="open" href="await-explainer.html">Open Part 3 →</a>
+</section>
+
+<!-- ARCHITECTURE -->
+<section class="card" id="architecture">
+  <h2><span class="icon">▸</span> How it's built</h2>
+
+<pre class="tree"><span class="dir">node-ts-test/</span>
+├── <span class="file">event-loop-index.html</span>       <span class="com">← you are here</span>
+├── <span class="file">js-q-explainer.html</span>         <span class="com">← Part 1</span>
+├── <span class="file">js-q-2-explainer.html</span>       <span class="com">← Part 2</span>
+├── <span class="file">await-explainer.html</span>        <span class="com">← Part 3</span>
+├── <span class="dir">cheatsheets/</span>
+│   ├── <span class="file">styles.css</span>              <span class="com">← shared Rose Pine, responsive grid, burger menu</span>
+│   └── <span class="file">app.js</span>                  <span class="com">← shared drawer toggle</span>
+└── <span class="dir">src/</span>
+    ├── <span class="file">js-q.js</span>                 <span class="com">← Part 1 puzzle source — run with `node src/js-q.js`</span>
+    └── <span class="file">js-q-2.js</span>               <span class="com">← Part 2 puzzle source — run with `node src/js-q-2.js`</span></pre>
+
+  <ul>
+    <li>Each explainer is a single HTML file linking <code class="inline">cheatsheets/styles.css</code> and <code class="inline">cheatsheets/app.js</code></li>
+    <li>Only JS-specific syntax-token colours and per-page styles (trace tables, queue-state cards, phase pills) stay inline</li>
+    <li>Every trace was verified by running the corresponding <code class="inline">.js</code> file with Node 24 and diffing the actual output against the predicted output character-for-character</li>
+    <li>No framework, no bundler, no dependencies — three pages totalling ~155 KB</li>
+  </ul>
+</section>
+
+<!-- RESOURCES -->
+<section class="card" id="resources">
+  <h2><span class="icon">▸</span> Further reading — event loop, promises &amp; async</h2>
+
+  <h3>Canonical specs &amp; runtime docs</h3>
+  <ul class="res-list">
+    <li>
+      <a href="https://html.spec.whatwg.org/multipage/webappapis.html#event-loops" target="_blank" rel="noopener">HTML Spec — Event loops</a>
+      <span class="src">whatwg.org</span>
+      <span class="desc">The canonical definition of "event loop" in browsers — task queues, microtask queues, the run-to-completion model.</span>
+    </li>
+    <li>
+      <a href="https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick" target="_blank" rel="noopener">Node.js — The event loop, timers, and process.nextTick</a>
+      <span class="src">nodejs.org</span>
+      <span class="desc">How Node's libuv-driven loop differs from a browser's — phases, <code class="inline">setImmediate</code> vs <code class="inline">setTimeout(0)</code>, <code class="inline">process.nextTick</code> priority.</span>
+    </li>
+    <li>
+      <a href="https://nodejs.org/api/cli.html#--unhandled-rejectionsmode" target="_blank" rel="noopener">Node.js — Unhandled rejection modes</a>
+      <span class="src">nodejs.org</span>
+      <span class="desc">Reference for <code class="inline">--unhandled-rejections=throw|warn|none|strict</code> — what Node does when a promise rejection escapes.</span>
+    </li>
+    <li>
+      <a href="https://tc39.es/ecma262/#sec-promise-resolve-functions" target="_blank" rel="noopener">ECMA-262 — Promise Resolve Functions</a>
+      <span class="src">tc39.es</span>
+      <span class="desc">Spec text for what <code class="inline">resolve()</code> actually does. Dense but authoritative.</span>
+    </li>
+    <li>
+      <a href="https://github.com/tc39/proposal-top-level-await" target="_blank" rel="noopener">TC39 — Top-level await proposal</a>
+      <span class="src">github.com</span>
+      <span class="desc">The motivation and design of top-level <code class="inline">await</code> in ESM modules — including the dependency-graph semantics.</span>
+    </li>
+  </ul>
+
+  <h3>MDN references</h3>
+  <ul class="res-list">
+    <li>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Event_loop" target="_blank" rel="noopener">MDN — The event loop</a>
+      <span class="src">mdn</span>
+      <span class="desc">High-level summary of the runtime model; good starter reading before diving into the WHATWG spec.</span>
+    </li>
+    <li>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise" target="_blank" rel="noopener">MDN — Promise</a>
+      <span class="src">mdn</span>
+      <span class="desc">Full API reference: constructor, static methods (<code class="inline">all</code>, <code class="inline">allSettled</code>, <code class="inline">race</code>, <code class="inline">any</code>), instance methods.</span>
+    </li>
+    <li>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function" target="_blank" rel="noopener">MDN — async function</a>
+      <span class="src">mdn</span>
+      <span class="desc">Reference for the <code class="inline">async</code> keyword and how it shapes function return types.</span>
+    </li>
+    <li>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await" target="_blank" rel="noopener">MDN — await operator</a>
+      <span class="src">mdn</span>
+      <span class="desc">Reference for <code class="inline">await</code> semantics, including the spec-equivalent <code class="inline">Promise.resolve(x).then(...)</code> behaviour.</span>
+    </li>
+  </ul>
+
+  <h3>Deep dives by humans</h3>
+  <ul class="res-list">
+    <li>
+      <a href="https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/" target="_blank" rel="noopener">Jake Archibald — Tasks, microtasks, queues and schedules</a>
+      <span class="src">jakearchibald.com</span>
+      <span class="desc">The definitive deep-dive article. Still the clearest written explanation of how microtask queueing works after a decade.</span>
+    </li>
+    <li>
+      <a href="https://www.youtube.com/watch?v=cCOL7MC4Pl0" target="_blank" rel="noopener">Jake Archibald — In the loop (JSConf.Asia 2018)</a>
+      <span class="src">youtube</span>
+      <span class="desc">45-minute talk version of the same material — animated, fast-paced, and worth the watch even if you've read the article.</span>
+    </li>
+    <li>
+      <a href="https://jakearchibald.com/2017/await-vs-return-vs-return-await/" target="_blank" rel="noopener">Jake Archibald — await vs return vs return await</a>
+      <span class="src">jakearchibald.com</span>
+      <span class="desc">Three subtly different ways to "return a promise" from an async function — and when each one matters. Background for Part 3's trap #4.</span>
+    </li>
+    <li>
+      <a href="https://v8.dev/blog/fast-async" target="_blank" rel="noopener">V8 blog — Faster async functions and promises</a>
+      <span class="src">v8.dev</span>
+      <span class="desc">How V8 7.2 (Chrome 73 / Node 11) eliminated the historical 2-microtask cost of <code class="inline">await</code> on a resolved promise.</span>
+    </li>
+  </ul>
+</section>
+
+<!-- VISUALISERS -->
+<section class="card" id="tools">
+  <h2><span class="icon">▸</span> Visualisers &amp; talks</h2>
+  <ul class="res-list">
+    <li>
+      <a href="https://www.jsv9000.app/" target="_blank" rel="noopener">JS Visualizer 9000</a>
+      <span class="src">jsv9000.app</span>
+      <span class="desc">Step through any JS snippet and watch the call stack, microtask queue, and macrotask queue update in real time. Pair with Part 1 and Part 2 source files for an instant a-ha moment.</span>
+    </li>
+    <li>
+      <a href="http://latentflip.com/loupe/" target="_blank" rel="noopener">Loupe (latentflip)</a>
+      <span class="src">latentflip.com</span>
+      <span class="desc">Philip Roberts' classic visualiser — the one used in his "What the heck is the event loop anyway?" talk. Slightly older (predates microtasks UI), but the call-stack animation is excellent.</span>
+    </li>
+    <li>
+      <a href="https://www.youtube.com/watch?v=8aGhZQkoFbQ" target="_blank" rel="noopener">Philip Roberts — What the heck is the event loop anyway? (JSConf EU 2014)</a>
+      <span class="src">youtube</span>
+      <span class="desc">The talk that introduced thousands of devs to the call-stack-plus-queue model. Older than the microtask era but still the best 25-minute intro.</span>
+    </li>
+  </ul>
+</section>
+
+<!-- CREDITS -->
+<section class="card" id="credits">
+  <h2><span class="icon">▸</span> Credits</h2>
+  <ul>
+    <li><strong>Theme:</strong> <a class="inline-docs" href="https://rosepinetheme.com" target="_blank" rel="noopener">Rose Pine</a> — palette by Emilia Dunfelt &amp; contributors. Used in its "Main" variant with the standard role mapping (love, gold, rose, pine, foam, iris).</li>
+    <li><strong>Fonts:</strong> system UI sans for prose; JetBrains Mono / Fira Code / SF Mono / Menlo for code blocks.</li>
+    <li><strong>Validation:</strong> every page checked with Python's <code class="inline">html.parser</code>; every event-loop trace verified by running the corresponding <code class="inline">.js</code> file with Node 24 and comparing output character-for-character.</li>
+  </ul>
+
+  <div class="note new">Looking for the standalone cheatsheets? They're in the <a class="inline-docs" href="cheatsheets-index.html">cheatsheets index</a> — TypeScript 6.0 and curl, both unrelated to this series.</div>
+</section>
+
+</div>
+</main>
+
+<footer>
+  JS event-loop series index · Rose Pine theme<br><br>
+  <strong style="color:var(--iris)">Series:</strong>
+  <a href="js-q-explainer.html">Part 1</a> ·
+  <a href="js-q-2-explainer.html">Part 2</a> ·
+  <a href="await-explainer.html">Part 3 (await)</a>
+  &nbsp;|&nbsp;
+  <a href="cheatsheets-index.html">→ Cheatsheets index</a>
+</footer>
+
+<script src="cheatsheets/app.js"></script>
+
+</body>
+</html>

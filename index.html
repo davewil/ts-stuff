@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rose Pine collection — landing</title>
+<link rel="stylesheet" href="cheatsheets/styles.css">
+<style>
+  /* Centered, two-card landing */
+  main.landing {
+    min-height: calc(100vh - 220px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem clamp(0.75rem, 2vw, 2rem) 3rem;
+  }
+  .pick {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 1100px;
+  }
+  .pick > a {
+    display: block;
+    background: var(--surface);
+    border: 1px solid var(--highlight-low);
+    border-radius: 12px;
+    padding: 2rem 1.6rem;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.18s, transform 0.18s, background 0.18s;
+    position: relative;
+    overflow: hidden;
+  }
+  .pick > a:hover {
+    border-color: var(--rose);
+    background: var(--overlay);
+    transform: translateY(-3px);
+  }
+  .pick .label {
+    display: inline-block;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    margin-bottom: 0.9rem;
+    background: var(--overlay);
+    border: 1px solid var(--highlight-med);
+  }
+  .pick .pick-cheats .label { color: var(--gold); border-color: var(--gold); }
+  .pick .pick-series .label { color: var(--iris); border-color: var(--iris); }
+
+  .pick h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.6rem;
+    color: var(--rose);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .pick p {
+    margin: 0 0 0.9rem;
+    color: var(--subtle);
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+  .pick ul {
+    margin: 0.4rem 0 1rem;
+    padding-left: 1.1rem;
+    color: var(--text);
+    font-size: 0.88rem;
+  }
+  .pick ul li { margin: 0.2rem 0; }
+  .pick .open {
+    display: inline-block;
+    margin-top: 0.4rem;
+    padding: 0.35rem 0.8rem;
+    background: var(--overlay);
+    border: 1px solid var(--highlight-med);
+    border-radius: 6px;
+    color: var(--foam);
+    font-size: 0.85rem;
+    font-family: "JetBrains Mono", monospace;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .pick > a:hover .open {
+    background: var(--highlight-med);
+    color: var(--rose);
+    border-color: var(--rose);
+  }
+
+  header.landing {
+    text-align: center;
+    border-bottom: 1px solid var(--highlight-med);
+  }
+  header.landing h1 { font-size: 2.2rem; }
+  header.landing p { max-width: 720px; margin: 0 auto; }
+
+  @media (max-width: 759px) {
+    header.landing h1 { font-size: 1.5rem; }
+    .pick > a { padding: 1.4rem 1.2rem; }
+    .pick h2 { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="landing">
+  <h1><span class="accent">Rose Pine</span> collection</h1>
+  <p>Two unrelated bodies of work, indexed separately. Pick the one you want.</p>
+</header>
+
+<main class="landing">
+  <div class="pick">
+
+    <a href="cheatsheets-index.html" class="pick-cheats">
+      <span class="label">Cheatsheets</span>
+      <h2>TypeScript &amp; curl</h2>
+      <p>Two standalone pocket references. Independent of each other — use whichever you need, in any order.</p>
+      <ul>
+        <li><strong>TypeScript 6.0</strong> — 23 sections, every heading linked to the handbook, full 5.0 → 6.0 changelog</li>
+        <li><strong>curl</strong> — 16 sections of HTTP-stack recipes, auth, TLS, retries, recipes</li>
+      </ul>
+      <span class="open">Open cheatsheets index →</span>
+    </a>
+
+    <a href="event-loop-index.html" class="pick-series">
+      <span class="label">JS event-loop series</span>
+      <h2>Three-part deep dive</h2>
+      <p>A sequential progression building one mental model. Best read Part 1 → 2 → 3 in order.</p>
+      <ul>
+        <li><strong>Part 1</strong> — sync, microtasks, macrotasks, timers (output: <code class="inline">A H D F G B C E</code>)</li>
+        <li><strong>Part 2</strong> — Promise executor body is sync; <code class="inline">.then</code> chains interleave</li>
+        <li><strong>Part 3</strong> — how <code class="inline">await</code> fits, 9 migration traps, full checklist</li>
+      </ul>
+      <span class="open">Open series index →</span>
+    </a>
+
+  </div>
+</main>
+
+<footer>
+  Rose Pine collection · landing page<br>
+  <a href="cheatsheets-index.html">Cheatsheets index</a> &nbsp;·&nbsp;
+  <a href="event-loop-index.html">Event-loop series index</a>
+</footer>
+
+</body>
+</html>

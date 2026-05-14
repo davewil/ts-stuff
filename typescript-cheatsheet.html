@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TypeScript 6.0 — Comprehensive Cheatsheet</title>
+<link rel="stylesheet" href="cheatsheets/styles.css">
+<style>
+  /* TS syntax token colors */
+  pre .kw    { color: var(--iris); font-weight: 600; }
+  pre .ty    { color: var(--foam); }
+  pre .str   { color: var(--gold); }
+  pre .num   { color: var(--rose); }
+  pre .fn    { color: var(--rose); }
+  pre .var   { color: var(--text); }
+  pre .op    { color: var(--subtle); }
+  pre .com   { color: var(--muted); font-style: italic; }
+  pre .err   { color: var(--love); text-decoration: underline wavy var(--love); }
+  pre .ok    { color: var(--pine); }
+  pre .lit   { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TypeScript <span class="accent">cheatsheet</span><span class="version">v6.0.3</span></h1>
+  <p>Comprehensive reference for modern TypeScript — types, generics, narrowing, utility types, and 5.x → 6.0 features.<br>
+  Each section links to the <a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/intro.html">official handbook</a>.</p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#primitives">Primitives</a>
+  <a href="#vars">Variables</a>
+  <a href="#objects">Objects</a>
+  <a href="#arrays">Arrays / tuples</a>
+  <a href="#functions">Functions</a>
+  <a href="#aliases">Type vs interface</a>
+  <a href="#unions">Unions / intersections</a>
+  <a href="#literals">Literals & narrowing</a>
+  <a href="#guards">Type guards</a>
+  <a href="#discriminated">Discriminated unions</a>
+  <a href="#generics">Generics</a>
+  <a href="#utility">Utility types</a>
+  <a href="#conditional">Conditional / infer</a>
+  <a href="#mapped">Mapped types</a>
+  <a href="#template">Template literals</a>
+  <a href="#classes">Classes</a>
+  <a href="#enums">Enums</a>
+  <a href="#modules">Modules</a>
+  <a href="#async">Async</a>
+  <a href="#decorators">Decorators</a>
+  <a href="#using">using / disposal</a>
+  <a href="#tsconfig">tsconfig</a>
+  <a href="#new">5.x → 6.0</a>
+</nav>
+
+<main>
+<div class="grid">
+
+<!-- PRIMITIVES -->
+<section class="card" id="primitives">
+  <h2><span class="icon">▸</span> Primitive types <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">let</span> name<span class="op">:</span> <span class="ty">string</span> <span class="op">=</span> <span class="str">"alice"</span>
+<span class="kw">let</span> age<span class="op">:</span> <span class="ty">number</span> <span class="op">=</span> <span class="num">30</span>
+<span class="kw">let</span> ok<span class="op">:</span> <span class="ty">boolean</span> <span class="op">=</span> <span class="kw">true</span>
+<span class="kw">let</span> big<span class="op">:</span> <span class="ty">bigint</span> <span class="op">=</span> <span class="num">9007199254740993n</span>
+<span class="kw">let</span> sym<span class="op">:</span> <span class="ty">symbol</span> <span class="op">=</span> <span class="fn">Symbol</span><span class="op">(</span><span class="str">"id"</span><span class="op">)</span>
+<span class="kw">let</span> nothing<span class="op">:</span> <span class="ty">null</span> <span class="op">=</span> <span class="kw">null</span>
+<span class="kw">let</span> notSet<span class="op">:</span> <span class="ty">undefined</span> <span class="op">=</span> <span class="kw">undefined</span></pre>
+
+  <h3>Special</h3>
+<pre><span class="ty">any</span>        <span class="com">// turns off checking — avoid</span>
+<span class="ty">unknown</span>    <span class="com">// safe any — must narrow before use</span>
+<span class="ty">never</span>      <span class="com">// no value can exist (exhaustiveness)</span>
+<span class="ty">void</span>       <span class="com">// fn returns nothing usable</span>
+<span class="ty">object</span>     <span class="com">// any non-primitive</span></pre>
+
+  <div class="note danger"><strong>Avoid:</strong> the boxed types <code class="inline">String</code>, <code class="inline">Number</code>, <code class="inline">Boolean</code> (capitalised). Always use the lowercase primitives.</div>
+</section>
+
+<!-- VARS -->
+<section class="card" id="vars">
+  <h2><span class="icon">▸</span> Variables &amp; const <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-annotations-on-variables" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="com">// Inferred — preferred</span>
+<span class="kw">const</span> count <span class="op">=</span> <span class="num">42</span>            <span class="com">// const → literal type 42</span>
+<span class="kw">let</span> total <span class="op">=</span> <span class="num">0</span>              <span class="com">// let   → widened to number</span>
+
+<span class="com">// Explicit annotation</span>
+<span class="kw">const</span> users<span class="op">:</span> <span class="ty">string</span><span class="op">[]</span> <span class="op">=</span> <span class="op">[]</span></pre>
+
+  <h3><code class="inline">as const</code></h3>
+<pre><span class="kw">const</span> role <span class="op">=</span> <span class="str">"admin"</span> <span class="kw">as</span> <span class="kw">const</span>     <span class="com">// type: "admin"</span>
+<span class="kw">const</span> point <span class="op">=</span> <span class="op">{</span> x<span class="op">:</span> <span class="num">1</span><span class="op">,</span> y<span class="op">:</span> <span class="num">2</span> <span class="op">}</span> <span class="kw">as</span> <span class="kw">const</span>
+<span class="com">// { readonly x: 1; readonly y: 2 }</span></pre>
+
+  <h3>satisfies — type-check without widening</h3>
+<pre><span class="kw">const</span> palette <span class="op">=</span> <span class="op">{</span>
+  red<span class="op">:</span>  <span class="op">[</span><span class="num">255</span><span class="op">,</span> <span class="num">0</span><span class="op">,</span> <span class="num">0</span><span class="op">],</span>
+  blue<span class="op">:</span> <span class="str">"#00f"</span><span class="op">,</span>
+<span class="op">}</span> <span class="kw">satisfies</span> <span class="ty">Record</span><span class="op">&lt;</span><span class="ty">string</span><span class="op">,</span> <span class="ty">string</span> <span class="op">|</span> <span class="ty">number</span><span class="op">[]&gt;</span>
+
+palette<span class="op">.</span>red<span class="op">[</span><span class="num">0</span><span class="op">].</span><span class="fn">toFixed</span><span class="op">()</span>   <span class="com">// ✓ still number[]</span>
+palette<span class="op">.</span>blue<span class="op">.</span><span class="fn">toUpperCase</span><span class="op">()</span>  <span class="com">// ✓ still string — types preserved</span></pre>
+</section>
+
+<!-- OBJECTS -->
+<section class="card" id="objects">
+  <h2><span class="icon">▸</span> Object types <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/objects.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">type</span> <span class="ty">User</span> <span class="op">=</span> <span class="op">{</span>
+  id<span class="op">:</span> <span class="ty">number</span>
+  name<span class="op">:</span> <span class="ty">string</span>
+  email<span class="op">?:</span> <span class="ty">string</span>                  <span class="com">// optional</span>
+  <span class="kw">readonly</span> createdAt<span class="op">:</span> <span class="ty">Date</span>       <span class="com">// readonly</span>
+  <span class="op">[</span>key<span class="op">:</span> <span class="ty">string</span><span class="op">]:</span> <span class="ty">unknown</span>          <span class="com">// index signature</span>
+<span class="op">}</span></pre>
+
+  <h3>Optional vs <code class="inline">| undefined</code></h3>
+<pre><span class="com">// With exactOptionalPropertyTypes: true — these differ:</span>
+<span class="kw">type</span> <span class="ty">A</span> <span class="op">=</span> <span class="op">{</span> name<span class="op">?:</span> <span class="ty">string</span> <span class="op">}</span>             <span class="com">// key may be absent</span>
+<span class="kw">type</span> <span class="ty">B</span> <span class="op">=</span> <span class="op">{</span> name<span class="op">:</span> <span class="ty">string</span> <span class="op">|</span> <span class="kw">undefined</span> <span class="op">}</span> <span class="com">// key required, value may be undefined</span></pre>
+
+  <h3>Index signatures</h3>
+<pre><span class="kw">type</span> <span class="ty">Headers</span> <span class="op">=</span> <span class="op">{</span> <span class="op">[</span>name<span class="op">:</span> <span class="ty">string</span><span class="op">]:</span> <span class="ty">string</span> <span class="op">}</span>
+<span class="kw">type</span> <span class="ty">Matrix</span>  <span class="op">=</span> <span class="op">{</span> <span class="op">[</span>row<span class="op">:</span> <span class="ty">number</span><span class="op">]:</span> <span class="op">{</span> <span class="op">[</span>col<span class="op">:</span> <span class="ty">number</span><span class="op">]:</span> <span class="ty">number</span> <span class="op">}</span> <span class="op">}</span></pre>
+</section>
+
+<!-- ARRAYS -->
+<section class="card" id="arrays">
+  <h2><span class="icon">▸</span> Arrays &amp; tuples <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/objects.html#tuple-types" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">const</span> a<span class="op">:</span> <span class="ty">number</span><span class="op">[]</span>          <span class="op">=</span> <span class="op">[</span><span class="num">1</span><span class="op">,</span> <span class="num">2</span><span class="op">,</span> <span class="num">3</span><span class="op">]</span>
+<span class="kw">const</span> b<span class="op">:</span> <span class="ty">Array</span><span class="op">&lt;</span><span class="ty">number</span><span class="op">&gt;</span>   <span class="op">=</span> <span class="op">[</span><span class="num">1</span><span class="op">,</span> <span class="num">2</span><span class="op">]</span>
+<span class="kw">const</span> r<span class="op">:</span> <span class="kw">readonly</span> <span class="ty">number</span><span class="op">[]</span> <span class="op">=</span> <span class="op">[</span><span class="num">1</span><span class="op">,</span> <span class="num">2</span><span class="op">]</span>
+
+<span class="com">// Tuple</span>
+<span class="kw">const</span> pair<span class="op">:</span> <span class="op">[</span><span class="ty">string</span><span class="op">,</span> <span class="ty">number</span><span class="op">]</span> <span class="op">=</span> <span class="op">[</span><span class="str">"x"</span><span class="op">,</span> <span class="num">1</span><span class="op">]</span>
+
+<span class="com">// Named tuple (labels improve hover info)</span>
+<span class="kw">type</span> <span class="ty">Range</span> <span class="op">=</span> <span class="op">[</span>start<span class="op">:</span> <span class="ty">number</span><span class="op">,</span> end<span class="op">:</span> <span class="ty">number</span><span class="op">]</span>
+
+<span class="com">// Variadic tuple</span>
+<span class="kw">type</span> <span class="ty">Args</span><span class="op">&lt;</span><span class="ty">T</span> <span class="kw">extends</span> <span class="ty">unknown</span><span class="op">[]&gt;</span> <span class="op">=</span> <span class="op">[</span>action<span class="op">:</span> <span class="ty">string</span><span class="op">,</span> <span class="op">...</span>args<span class="op">:</span> <span class="ty">T</span><span class="op">]</span></pre>
+</section>
+
+<!-- FUNCTIONS -->
+<section class="card" id="functions">
+  <h2><span class="icon">▸</span> Functions <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/functions.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="com">// Declaration</span>
+<span class="kw">function</span> <span class="fn">add</span><span class="op">(</span>a<span class="op">:</span> <span class="ty">number</span><span class="op">,</span> b<span class="op">:</span> <span class="ty">number</span><span class="op">):</span> <span class="ty">number</span> <span class="op">{</span>
+  <span class="kw">return</span> a <span class="op">+</span> b
+<span class="op">}</span>
+
+<span class="com">// Expression</span>
+<span class="kw">const</span> <span class="fn">sub</span> <span class="op">=</span> <span class="op">(</span>a<span class="op">:</span> <span class="ty">number</span><span class="op">,</span> b<span class="op">:</span> <span class="ty">number</span><span class="op">):</span> <span class="ty">number</span> <span class="op">=&gt;</span> a <span class="op">-</span> b
+
+<span class="com">// Function type alias</span>
+<span class="kw">type</span> <span class="ty">BinaryOp</span> <span class="op">=</span> <span class="op">(</span>a<span class="op">:</span> <span class="ty">number</span><span class="op">,</span> b<span class="op">:</span> <span class="ty">number</span><span class="op">)</span> <span class="op">=&gt;</span> <span class="ty">number</span>
+
+<span class="com">// Optional / default / rest</span>
+<span class="kw">function</span> <span class="fn">greet</span><span class="op">(</span>name<span class="op">:</span> <span class="ty">string</span><span class="op">,</span> tag<span class="op">?:</span> <span class="ty">string</span><span class="op">,</span> punct<span class="op">:</span> <span class="ty">string</span> <span class="op">=</span> <span class="str">"!"</span><span class="op">):</span> <span class="ty">string</span> <span class="op">{</span> <span class="op">...</span> <span class="op">}</span>
+<span class="kw">function</span> <span class="fn">sum</span><span class="op">(...</span>xs<span class="op">:</span> <span class="ty">number</span><span class="op">[]):</span> <span class="ty">number</span> <span class="op">{</span> <span class="op">...</span> <span class="op">}</span></pre>
+
+  <h3>Overloads</h3>
+<pre><span class="kw">function</span> <span class="fn">parse</span><span class="op">(</span>s<span class="op">:</span> <span class="ty">string</span><span class="op">):</span> <span class="ty">number</span>
+<span class="kw">function</span> <span class="fn">parse</span><span class="op">(</span>s<span class="op">:</span> <span class="ty">string</span><span class="op">[]):</span> <span class="ty">number</span><span class="op">[]</span>
+<span class="kw">function</span> <span class="fn">parse</span><span class="op">(</span>s<span class="op">:</span> <span class="ty">string</span> <span class="op">|</span> <span class="ty">string</span><span class="op">[]):</span> <span class="ty">number</span> <span class="op">|</span> <span class="ty">number</span><span class="op">[]</span> <span class="op">{</span> <span class="op">...</span> <span class="op">}</span></pre>
+
+  <h3>Call signatures &amp; constructors</h3>
+<pre><span class="kw">type</span> <span class="ty">Logger</span> <span class="op">=</span> <span class="op">{</span>
+  <span class="op">(</span>msg<span class="op">:</span> <span class="ty">string</span><span class="op">):</span> <span class="ty">void</span>          <span class="com">// callable</span>
+  level<span class="op">:</span> <span class="ty">"info"</span> <span class="op">|</span> <span class="ty">"warn"</span>
+<span class="op">}</span>
+<span class="kw">type</span> <span class="ty">UserCtor</span> <span class="op">=</span> <span class="kw">new</span> <span class="op">(</span>id<span class="op">:</span> <span class="ty">number</span><span class="op">)</span> <span class="op">=&gt;</span> <span class="ty">User</span>   <span class="com">// constructable</span></pre>
+</section>
+
+<!-- TYPE VS INTERFACE -->
+<section class="card" id="aliases">
+  <h2><span class="icon">▸</span> type vs interface <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#differences-between-type-aliases-and-interfaces" target="_blank" rel="noopener">docs ↗</a></h2>
+
+  <table>
+    <tr><th></th><th>type</th><th>interface</th></tr>
+    <tr><td>Object shape</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Union / primitive</td><td>✓</td><td>✗</td></tr>
+    <tr><td>Mapped / conditional</td><td>✓</td><td>✗</td></tr>
+    <tr><td>Declaration merging</td><td>✗</td><td>✓</td></tr>
+    <tr><td>extends</td><td>via <code>&amp;</code></td><td>native</td></tr>
+    <tr><td>Performance (large)</td><td>fine</td><td>slightly better</td></tr>
+  </table>
+
+<pre><span class="kw">interface</span> <span class="ty">Animal</span> <span class="op">{</span> name<span class="op">:</span> <span class="ty">string</span> <span class="op">}</span>
+<span class="kw">interface</span> <span class="ty">Dog</span> <span class="kw">extends</span> <span class="ty">Animal</span> <span class="op">{</span> bark<span class="op">():</span> <span class="ty">void</span> <span class="op">}</span>
+
+<span class="kw">type</span> <span class="ty">Animal2</span> <span class="op">=</span> <span class="op">{</span> name<span class="op">:</span> <span class="ty">string</span> <span class="op">}</span>
+<span class="kw">type</span> <span class="ty">Dog2</span>    <span class="op">=</span> <span class="ty">Animal2</span> <span class="op">&amp;</span> <span class="op">{</span> <span class="fn">bark</span><span class="op">():</span> <span class="ty">void</span> <span class="op">}</span>
+
+<span class="com">// Declaration merging — interface only:</span>
+<span class="kw">interface</span> <span class="ty">Window</span> <span class="op">{</span> myApi<span class="op">:</span> <span class="ty">Api</span> <span class="op">}</span></pre>
+
+  <div class="note"><strong>Rule of thumb:</strong> use <code class="inline">interface</code> for public, extensible object shapes (especially library types); use <code class="inline">type</code> for unions, intersections, and computed types.</div>
+</section>
+
+<!-- UNIONS -->
+<section class="card" id="unions">
+  <h2><span class="icon">▸</span> Unions &amp; intersections <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#union-types" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">type</span> <span class="ty">Id</span> <span class="op">=</span> <span class="ty">string</span> <span class="op">|</span> <span class="ty">number</span>                     <span class="com">// union</span>
+<span class="kw">type</span> <span class="ty">Named</span> <span class="op">=</span> <span class="op">{</span> name<span class="op">:</span> <span class="ty">string</span> <span class="op">}</span>
+<span class="kw">type</span> <span class="ty">Aged</span>  <span class="op">=</span> <span class="op">{</span> age<span class="op">:</span> <span class="ty">number</span> <span class="op">}</span>
+<span class="kw">type</span> <span class="ty">Person</span> <span class="op">=</span> <span class="ty">Named</span> <span class="op">&amp;</span> <span class="ty">Aged</span>                  <span class="com">// intersection</span></pre>
+
+  <h3>Distributive unions</h3>
+<pre><span class="kw">type</span> <span class="ty">Boxed</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">{</span> value<span class="op">:</span> <span class="ty">T</span> <span class="op">}</span>
+<span class="kw">type</span> <span class="ty">BoxedSN</span>  <span class="op">=</span> <span class="ty">Boxed</span><span class="op">&lt;</span><span class="ty">string</span> <span class="op">|</span> <span class="ty">number</span><span class="op">&gt;</span>
+<span class="com">// → { value: string } | { value: number }  ❌ NO — generic doesn't distribute</span>
+<span class="com">// Distribution only happens for naked type-params in conditional types:</span>
+<span class="kw">type</span> <span class="ty">Box</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ty">T</span> <span class="kw">extends</span> <span class="ty">unknown</span> <span class="op">?</span> <span class="op">{</span> value<span class="op">:</span> <span class="ty">T</span> <span class="op">}</span> <span class="op">:</span> <span class="kw">never</span>
+<span class="kw">type</span> <span class="ty">Boxes</span> <span class="op">=</span> <span class="ty">Box</span><span class="op">&lt;</span><span class="ty">string</span> <span class="op">|</span> <span class="ty">number</span><span class="op">&gt;</span>
+<span class="com">// → { value: string } | { value: number }</span></pre>
+</section>
+
+<!-- LITERALS -->
+<section class="card" id="literals">
+  <h2><span class="icon">▸</span> Literal types &amp; narrowing <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/narrowing.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">type</span> <span class="ty">Direction</span> <span class="op">=</span> <span class="lit">"north"</span> <span class="op">|</span> <span class="lit">"south"</span> <span class="op">|</span> <span class="lit">"east"</span> <span class="op">|</span> <span class="lit">"west"</span>
+<span class="kw">type</span> <span class="ty">Bit</span>       <span class="op">=</span> <span class="num">0</span> <span class="op">|</span> <span class="num">1</span>
+<span class="kw">type</span> <span class="ty">Status</span>    <span class="op">=</span> <span class="kw">true</span> <span class="op">|</span> <span class="kw">false</span></pre>
+
+  <h3>Narrowing flow</h3>
+<pre><span class="kw">function</span> <span class="fn">area</span><span class="op">(</span>s<span class="op">:</span> <span class="ty">string</span> <span class="op">|</span> <span class="ty">number</span><span class="op">):</span> <span class="ty">number</span> <span class="op">{</span>
+  <span class="kw">if</span> <span class="op">(</span><span class="kw">typeof</span> s <span class="op">===</span> <span class="str">"string"</span><span class="op">)</span> <span class="kw">return</span> s<span class="op">.</span>length   <span class="com">// s: string</span>
+  <span class="kw">return</span> s <span class="op">*</span> s                                       <span class="com">// s: number</span>
+<span class="op">}</span></pre>
+
+  <h3>Narrowing operators</h3>
+  <ul>
+    <li><code class="inline">typeof</code> — primitive checks</li>
+    <li><code class="inline">instanceof</code> — class checks (respects <code class="inline">Symbol.hasInstance</code>)</li>
+    <li><code class="inline">in</code> — property check</li>
+    <li><code class="inline">Array.isArray()</code></li>
+    <li>equality against literal: <code class="inline">x === "a"</code></li>
+    <li>truthy/falsy: <code class="inline">if (x)</code> — narrows out null/undefined/0/""</li>
+  </ul>
+
+  <h3>Assertion functions</h3>
+<pre><span class="kw">function</span> <span class="fn">assert</span><span class="op">(</span>cond<span class="op">:</span> <span class="ty">unknown</span><span class="op">,</span> msg<span class="op">?:</span> <span class="ty">string</span><span class="op">):</span> <span class="kw">asserts</span> cond <span class="op">{</span>
+  <span class="kw">if</span> <span class="op">(!</span>cond<span class="op">)</span> <span class="kw">throw</span> <span class="kw">new</span> <span class="fn">Error</span><span class="op">(</span>msg<span class="op">)</span>
+<span class="op">}</span>
+<span class="fn">assert</span><span class="op">(</span><span class="kw">typeof</span> input <span class="op">===</span> <span class="str">"string"</span><span class="op">)</span>
+input<span class="op">.</span><span class="fn">toUpperCase</span><span class="op">()</span>  <span class="com">// ✓ narrowed</span></pre>
+</section>
+
+<!-- GUARDS -->
+<section class="card" id="guards">
+  <h2><span class="icon">▸</span> Type guards &amp; predicates <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates" target="_blank" rel="noopener">docs ↗</a></h2>
+
+  <h3>User-defined predicate</h3>
+<pre><span class="kw">function</span> <span class="fn">isString</span><span class="op">(</span>x<span class="op">:</span> <span class="ty">unknown</span><span class="op">):</span> x <span class="kw">is</span> <span class="ty">string</span> <span class="op">{</span>
+  <span class="kw">return</span> <span class="kw">typeof</span> x <span class="op">===</span> <span class="str">"string"</span>
+<span class="op">}</span></pre>
+
+  <h3>Inferred predicates <span style="color:var(--iris)">— 5.5+</span></h3>
+<pre><span class="kw">const</span> mixed <span class="op">=</span> <span class="op">[</span><span class="num">1</span><span class="op">,</span> <span class="str">"a"</span><span class="op">,</span> <span class="num">2</span><span class="op">,</span> <span class="str">"b"</span><span class="op">]</span>
+<span class="kw">const</span> nums <span class="op">=</span> mixed<span class="op">.</span><span class="fn">filter</span><span class="op">(</span>x <span class="op">=&gt;</span> <span class="kw">typeof</span> x <span class="op">===</span> <span class="str">"number"</span><span class="op">)</span>
+<span class="com">// nums: number[]  ✓  (was (string|number)[] before 5.5)</span></pre>
+
+  <h3>Property-based narrowing</h3>
+<pre><span class="kw">function</span> <span class="fn">hasName</span><span class="op">(</span>x<span class="op">:</span> <span class="ty">unknown</span><span class="op">):</span> x <span class="kw">is</span> <span class="op">{</span> name<span class="op">:</span> <span class="ty">string</span> <span class="op">}</span> <span class="op">{</span>
+  <span class="kw">return</span> <span class="kw">typeof</span> x <span class="op">===</span> <span class="str">"object"</span> <span class="op">&amp;&amp;</span> x <span class="op">!==</span> <span class="kw">null</span> <span class="op">&amp;&amp;</span>
+         <span class="str">"name"</span> <span class="kw">in</span> x <span class="op">&amp;&amp;</span> <span class="kw">typeof</span> <span class="op">(</span>x <span class="kw">as</span> <span class="ty">any</span><span class="op">).</span>name <span class="op">===</span> <span class="str">"string"</span>
+<span class="op">}</span></pre>
+</section>
+
+<!-- DISCRIMINATED -->
+<section class="card" id="discriminated">
+  <h2><span class="icon">▸</span> Discriminated unions <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">type</span> <span class="ty">Shape</span> <span class="op">=</span>
+  <span class="op">|</span> <span class="op">{</span> kind<span class="op">:</span> <span class="lit">"circle"</span><span class="op">;</span>  radius<span class="op">:</span> <span class="ty">number</span> <span class="op">}</span>
+  <span class="op">|</span> <span class="op">{</span> kind<span class="op">:</span> <span class="lit">"square"</span><span class="op">;</span>  side<span class="op">:</span> <span class="ty">number</span> <span class="op">}</span>
+  <span class="op">|</span> <span class="op">{</span> kind<span class="op">:</span> <span class="lit">"rect"</span><span class="op">;</span>    w<span class="op">:</span> <span class="ty">number</span><span class="op">;</span> h<span class="op">:</span> <span class="ty">number</span> <span class="op">}</span>
+
+<span class="kw">function</span> <span class="fn">area</span><span class="op">(</span>s<span class="op">:</span> <span class="ty">Shape</span><span class="op">):</span> <span class="ty">number</span> <span class="op">{</span>
+  <span class="kw">switch</span> <span class="op">(</span>s<span class="op">.</span>kind<span class="op">)</span> <span class="op">{</span>
+    <span class="kw">case</span> <span class="str">"circle"</span><span class="op">:</span> <span class="kw">return</span> <span class="ty">Math</span><span class="op">.</span>PI <span class="op">*</span> s<span class="op">.</span>radius <span class="op">**</span> <span class="num">2</span>
+    <span class="kw">case</span> <span class="str">"square"</span><span class="op">:</span> <span class="kw">return</span> s<span class="op">.</span>side <span class="op">*</span> s<span class="op">.</span>side
+    <span class="kw">case</span> <span class="str">"rect"</span><span class="op">:</span>   <span class="kw">return</span> s<span class="op">.</span>w <span class="op">*</span> s<span class="op">.</span>h
+    <span class="kw">default</span><span class="op">:</span>        <span class="kw">return</span> <span class="fn">assertNever</span><span class="op">(</span>s<span class="op">)</span>
+  <span class="op">}</span>
+<span class="op">}</span>
+<span class="kw">function</span> <span class="fn">assertNever</span><span class="op">(</span>x<span class="op">:</span> <span class="kw">never</span><span class="op">):</span> <span class="kw">never</span> <span class="op">{</span>
+  <span class="kw">throw</span> <span class="kw">new</span> <span class="fn">Error</span><span class="op">(</span><span class="str">`unhandled: </span><span class="op">${</span>x<span class="op">}</span><span class="str">`</span><span class="op">)</span>
+<span class="op">}</span></pre>
+
+  <div class="note"><strong>Why this matters:</strong> if you add a new variant to <code class="inline">Shape</code> and forget a <code class="inline">case</code>, the <code class="inline">assertNever</code> call fails at compile time — the un-handled variant won't be <code class="inline">never</code>.</div>
+</section>
+
+<!-- GENERICS -->
+<section class="card" id="generics">
+  <h2><span class="icon">▸</span> Generics <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/generics.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">function</span> <span class="fn">identity</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;(</span>x<span class="op">:</span> <span class="ty">T</span><span class="op">):</span> <span class="ty">T</span> <span class="op">{</span> <span class="kw">return</span> x <span class="op">}</span>
+
+<span class="com">// Constraint</span>
+<span class="kw">function</span> <span class="fn">pluck</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">,</span> <span class="ty">K</span> <span class="kw">extends</span> <span class="kw">keyof</span> <span class="ty">T</span><span class="op">&gt;(</span>o<span class="op">:</span> <span class="ty">T</span><span class="op">,</span> k<span class="op">:</span> <span class="ty">K</span><span class="op">):</span> <span class="ty">T</span><span class="op">[</span><span class="ty">K</span><span class="op">]</span> <span class="op">{</span>
+  <span class="kw">return</span> o<span class="op">[</span>k<span class="op">]</span>
+<span class="op">}</span>
+
+<span class="com">// Default</span>
+<span class="kw">type</span> <span class="ty">Result</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">,</span> <span class="ty">E</span> <span class="op">=</span> <span class="ty">Error</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">{</span> ok<span class="op">:</span> <span class="kw">true</span><span class="op">;</span> value<span class="op">:</span> <span class="ty">T</span> <span class="op">}</span> <span class="op">|</span> <span class="op">{</span> ok<span class="op">:</span> <span class="kw">false</span><span class="op">;</span> err<span class="op">:</span> <span class="ty">E</span> <span class="op">}</span></pre>
+
+  <h3><code class="inline">const</code> type parameters <span style="color:var(--iris)">— 5.0+</span></h3>
+<pre><span class="kw">function</span> <span class="fn">first</span><span class="op">&lt;</span><span class="kw">const</span> <span class="ty">T</span> <span class="kw">extends</span> <span class="kw">readonly</span> <span class="ty">unknown</span><span class="op">[]&gt;(</span>xs<span class="op">:</span> <span class="ty">T</span><span class="op">):</span> <span class="ty">T</span><span class="op">[</span><span class="num">0</span><span class="op">]</span> <span class="op">{</span>
+  <span class="kw">return</span> xs<span class="op">[</span><span class="num">0</span><span class="op">]</span>
+<span class="op">}</span>
+<span class="kw">const</span> a <span class="op">=</span> <span class="fn">first</span><span class="op">([</span><span class="str">"a"</span><span class="op">,</span> <span class="str">"b"</span><span class="op">,</span> <span class="str">"c"</span><span class="op">])</span>   <span class="com">// type: "a"  (not string)</span></pre>
+
+  <h3><code class="inline">NoInfer&lt;T&gt;</code> <span style="color:var(--iris)">— 5.4+</span></h3>
+<pre><span class="kw">function</span> <span class="fn">createState</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;(</span>initial<span class="op">:</span> <span class="ty">T</span><span class="op">,</span> values<span class="op">:</span> <span class="ty">NoInfer</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;[])</span> <span class="op">{</span> <span class="op">...</span> <span class="op">}</span>
+<span class="fn">createState</span><span class="op">(</span><span class="str">"red"</span><span class="op">,</span> <span class="op">[</span><span class="str">"red"</span><span class="op">,</span> <span class="str">"green"</span><span class="op">,</span> <span class="str">"blue"</span><span class="op">])</span>
+<span class="com">// T inferred from `initial`, not widened by `values`</span></pre>
+</section>
+
+<!-- UTILITY -->
+<section class="card" id="utility">
+  <h2><span class="icon">▸</span> Built-in utility types <a class="docs" href="https://www.typescriptlang.org/docs/handbook/utility-types.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+  <table>
+    <tr><th>Type</th><th>Effect</th></tr>
+    <tr><td><code>Partial&lt;T&gt;</code></td><td>all props optional</td></tr>
+    <tr><td><code>Required&lt;T&gt;</code></td><td>all props required</td></tr>
+    <tr><td><code>Readonly&lt;T&gt;</code></td><td>all props readonly</td></tr>
+    <tr><td><code>Pick&lt;T, K&gt;</code></td><td>keep keys <code>K</code></td></tr>
+    <tr><td><code>Omit&lt;T, K&gt;</code></td><td>drop keys <code>K</code></td></tr>
+    <tr><td><code>Record&lt;K, V&gt;</code></td><td>object with key set <code>K</code></td></tr>
+    <tr><td><code>Exclude&lt;T, U&gt;</code></td><td>remove union members</td></tr>
+    <tr><td><code>Extract&lt;T, U&gt;</code></td><td>keep matching members</td></tr>
+    <tr><td><code>NonNullable&lt;T&gt;</code></td><td>strip <code>null | undefined</code></td></tr>
+    <tr><td><code>ReturnType&lt;F&gt;</code></td><td>fn return type</td></tr>
+    <tr><td><code>Parameters&lt;F&gt;</code></td><td>fn args tuple</td></tr>
+    <tr><td><code>ConstructorParameters&lt;C&gt;</code></td><td>ctor args</td></tr>
+    <tr><td><code>InstanceType&lt;C&gt;</code></td><td>instance shape</td></tr>
+    <tr><td><code>Awaited&lt;P&gt;</code></td><td>unwrap Promise (recursive)</td></tr>
+    <tr><td><code>NoInfer&lt;T&gt;</code></td><td>block inference site (5.4+)</td></tr>
+    <tr><td><code>Uppercase&lt;S&gt;</code></td><td>intrinsic string</td></tr>
+    <tr><td><code>Lowercase&lt;S&gt;</code></td><td>"</td></tr>
+    <tr><td><code>Capitalize&lt;S&gt;</code></td><td>"</td></tr>
+    <tr><td><code>Uncapitalize&lt;S&gt;</code></td><td>"</td></tr>
+  </table>
+
+<pre><span class="kw">type</span> <span class="ty">UserPatch</span>   <span class="op">=</span> <span class="ty">Partial</span><span class="op">&lt;</span><span class="ty">User</span><span class="op">&gt;</span>
+<span class="kw">type</span> <span class="ty">UserPublic</span>  <span class="op">=</span> <span class="ty">Omit</span><span class="op">&lt;</span><span class="ty">User</span><span class="op">,</span> <span class="str">"password"</span> <span class="op">|</span> <span class="str">"token"</span><span class="op">&gt;</span>
+<span class="kw">type</span> <span class="ty">ApiResult</span>   <span class="op">=</span> <span class="ty">Awaited</span><span class="op">&lt;</span><span class="ty">ReturnType</span><span class="op">&lt;</span> <span class="kw">typeof</span> fetchUser <span class="op">&gt;&gt;</span></pre>
+</section>
+
+<!-- CONDITIONAL -->
+<section class="card" id="conditional">
+  <h2><span class="icon">▸</span> Conditional types &amp; infer <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/conditional-types.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">type</span> <span class="ty">IsString</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ty">T</span> <span class="kw">extends</span> <span class="ty">string</span> <span class="op">?</span> <span class="kw">true</span> <span class="op">:</span> <span class="kw">false</span>
+
+<span class="com">// infer — extract part of a type</span>
+<span class="kw">type</span> <span class="ty">Return</span><span class="op">&lt;</span><span class="ty">F</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ty">F</span> <span class="kw">extends</span> <span class="op">(...</span>a<span class="op">:</span> <span class="ty">any</span><span class="op">[])</span> <span class="op">=&gt;</span> <span class="kw">infer</span> <span class="ty">R</span> <span class="op">?</span> <span class="ty">R</span> <span class="op">:</span> <span class="kw">never</span>
+<span class="kw">type</span> <span class="ty">First</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span>  <span class="op">=</span> <span class="ty">T</span> <span class="kw">extends</span> <span class="op">[</span><span class="kw">infer</span> <span class="ty">H</span><span class="op">,</span> <span class="op">...</span><span class="ty">any</span><span class="op">[]]</span> <span class="op">?</span> <span class="ty">H</span> <span class="op">:</span> <span class="kw">never</span>
+<span class="kw">type</span> <span class="ty">UnwrapP</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ty">T</span> <span class="kw">extends</span> <span class="ty">Promise</span><span class="op">&lt;</span><span class="kw">infer</span> <span class="ty">U</span><span class="op">&gt;</span> <span class="op">?</span> <span class="ty">U</span> <span class="op">:</span> <span class="ty">T</span></pre>
+
+  <h3>Distribution control</h3>
+<pre><span class="com">// Naked T → distributes over union</span>
+<span class="kw">type</span> <span class="ty">ToArray</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ty">T</span> <span class="kw">extends</span> <span class="ty">any</span> <span class="op">?</span> <span class="ty">T</span><span class="op">[]</span> <span class="op">:</span> <span class="kw">never</span>
+<span class="kw">type</span> <span class="ty">A</span> <span class="op">=</span> <span class="ty">ToArray</span><span class="op">&lt;</span><span class="ty">string</span> <span class="op">|</span> <span class="ty">number</span><span class="op">&gt;</span>  <span class="com">// string[] | number[]</span>
+
+<span class="com">// Wrap in tuple → block distribution</span>
+<span class="kw">type</span> <span class="ty">ToArr2</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">[</span><span class="ty">T</span><span class="op">]</span> <span class="kw">extends</span> <span class="op">[</span><span class="ty">any</span><span class="op">]</span> <span class="op">?</span> <span class="ty">T</span><span class="op">[]</span> <span class="op">:</span> <span class="kw">never</span>
+<span class="kw">type</span> <span class="ty">B</span> <span class="op">=</span> <span class="ty">ToArr2</span><span class="op">&lt;</span><span class="ty">string</span> <span class="op">|</span> <span class="ty">number</span><span class="op">&gt;</span> <span class="com">// (string | number)[]</span></pre>
+</section>
+
+<!-- MAPPED -->
+<section class="card" id="mapped">
+  <h2><span class="icon">▸</span> Mapped types <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/mapped-types.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="com">// Basic</span>
+<span class="kw">type</span> <span class="ty">Optional</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">{</span> <span class="op">[</span><span class="ty">K</span> <span class="kw">in</span> <span class="kw">keyof</span> <span class="ty">T</span><span class="op">]?:</span> <span class="ty">T</span><span class="op">[</span><span class="ty">K</span><span class="op">]</span> <span class="op">}</span>
+
+<span class="com">// Modifiers: +readonly / -readonly / +? / -?</span>
+<span class="kw">type</span> <span class="ty">Mutable</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span>     <span class="op">=</span> <span class="op">{</span> <span class="op">-</span><span class="kw">readonly</span> <span class="op">[</span><span class="ty">K</span> <span class="kw">in</span> <span class="kw">keyof</span> <span class="ty">T</span><span class="op">]:</span> <span class="ty">T</span><span class="op">[</span><span class="ty">K</span><span class="op">]</span> <span class="op">}</span>
+<span class="kw">type</span> <span class="ty">RequiredKeys</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">{</span> <span class="op">[</span><span class="ty">K</span> <span class="kw">in</span> <span class="kw">keyof</span> <span class="ty">T</span><span class="op">]-?:</span> <span class="ty">T</span><span class="op">[</span><span class="ty">K</span><span class="op">]</span> <span class="op">}</span>
+
+<span class="com">// Key remapping with `as`</span>
+<span class="kw">type</span> <span class="ty">Getters</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">{</span>
+  <span class="op">[</span><span class="ty">K</span> <span class="kw">in</span> <span class="kw">keyof</span> <span class="ty">T</span> <span class="kw">as</span> <span class="str">`get</span><span class="op">${</span><span class="ty">Capitalize</span><span class="op">&lt;</span><span class="ty">string</span> <span class="op">&amp;</span> <span class="ty">K</span><span class="op">&gt;}</span><span class="str">`</span><span class="op">]:</span> <span class="op">()</span> <span class="op">=&gt;</span> <span class="ty">T</span><span class="op">[</span><span class="ty">K</span><span class="op">]</span>
+<span class="op">}</span>
+<span class="com">// Getters&lt;{name: string; age: number}&gt; →</span>
+<span class="com">// { getName(): string; getAge(): number }</span>
+
+<span class="com">// Filter keys (omit functions)</span>
+<span class="kw">type</span> <span class="ty">DataOnly</span><span class="op">&lt;</span><span class="ty">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">{</span>
+  <span class="op">[</span><span class="ty">K</span> <span class="kw">in</span> <span class="kw">keyof</span> <span class="ty">T</span> <span class="kw">as</span> <span class="ty">T</span><span class="op">[</span><span class="ty">K</span><span class="op">]</span> <span class="kw">extends</span> <span class="ty">Function</span> <span class="op">?</span> <span class="kw">never</span> <span class="op">:</span> <span class="ty">K</span><span class="op">]:</span> <span class="ty">T</span><span class="op">[</span><span class="ty">K</span><span class="op">]</span>
+<span class="op">}</span></pre>
+</section>
+
+<!-- TEMPLATE -->
+<section class="card" id="template">
+  <h2><span class="icon">▸</span> Template literal types <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">type</span> <span class="ty">Greeting</span> <span class="op">=</span> <span class="str">`hello, </span><span class="op">${</span><span class="ty">string</span><span class="op">}</span><span class="str">`</span>
+<span class="kw">type</span> <span class="ty">Route</span>    <span class="op">=</span> <span class="str">`/</span><span class="op">${</span><span class="lit">"users"</span> <span class="op">|</span> <span class="lit">"posts"</span><span class="op">}</span><span class="str">/</span><span class="op">${</span><span class="ty">string</span><span class="op">}</span><span class="str">`</span>
+
+<span class="com">// CSS-like enums</span>
+<span class="kw">type</span> <span class="ty">Side</span>   <span class="op">=</span> <span class="lit">"top"</span> <span class="op">|</span> <span class="lit">"right"</span> <span class="op">|</span> <span class="lit">"bottom"</span> <span class="op">|</span> <span class="lit">"left"</span>
+<span class="kw">type</span> <span class="ty">Margin</span> <span class="op">=</span> <span class="str">`margin-</span><span class="op">${</span><span class="ty">Side</span><span class="op">}</span><span class="str">`</span>
+<span class="com">// "margin-top" | "margin-right" | "margin-bottom" | "margin-left"</span>
+
+<span class="com">// Parse with infer</span>
+<span class="kw">type</span> <span class="ty">Split</span><span class="op">&lt;</span><span class="ty">S</span><span class="op">,</span> <span class="ty">D</span> <span class="kw">extends</span> <span class="ty">string</span><span class="op">&gt;</span> <span class="op">=</span>
+  <span class="ty">S</span> <span class="kw">extends</span> <span class="str">`</span><span class="op">${</span><span class="kw">infer</span> <span class="ty">H</span><span class="op">}${</span><span class="ty">D</span><span class="op">}${</span><span class="kw">infer</span> <span class="ty">R</span><span class="op">}</span><span class="str">`</span>
+    <span class="op">?</span> <span class="op">[</span><span class="ty">H</span><span class="op">,</span> <span class="op">...</span><span class="ty">Split</span><span class="op">&lt;</span><span class="ty">R</span><span class="op">,</span> <span class="ty">D</span><span class="op">&gt;]</span>
+    <span class="op">:</span> <span class="op">[</span><span class="ty">S</span><span class="op">]</span>
+<span class="kw">type</span> <span class="ty">P</span> <span class="op">=</span> <span class="ty">Split</span><span class="op">&lt;</span><span class="lit">"a.b.c"</span><span class="op">,</span> <span class="lit">"."</span><span class="op">&gt;</span>  <span class="com">// ["a","b","c"]</span></pre>
+</section>
+
+<!-- CLASSES -->
+<section class="card" id="classes">
+  <h2><span class="icon">▸</span> Classes <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/classes.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">class</span> <span class="ty">Account</span> <span class="op">{</span>
+  <span class="kw">readonly</span> id<span class="op">:</span> <span class="ty">string</span>
+  <span class="kw">private</span>  #balance<span class="op">:</span> <span class="ty">number</span>     <span class="com">// JS private (truly hidden)</span>
+  <span class="kw">protected</span> log<span class="op">:</span> <span class="ty">string</span><span class="op">[]</span> <span class="op">=</span> <span class="op">[]</span>
+
+  <span class="fn">constructor</span><span class="op">(</span><span class="kw">public</span> name<span class="op">:</span> <span class="ty">string</span><span class="op">,</span> id<span class="op">:</span> <span class="ty">string</span><span class="op">)</span> <span class="op">{</span>
+    <span class="kw">this</span><span class="op">.</span>id <span class="op">=</span> id
+    <span class="kw">this</span><span class="op">.</span>#balance <span class="op">=</span> <span class="num">0</span>
+  <span class="op">}</span>
+
+  <span class="kw">get</span> <span class="fn">balance</span><span class="op">():</span> <span class="ty">number</span> <span class="op">{</span> <span class="kw">return</span> <span class="kw">this</span><span class="op">.</span>#balance <span class="op">}</span>
+  <span class="kw">set</span> <span class="fn">balance</span><span class="op">(</span>v<span class="op">:</span> <span class="ty">number</span><span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span>#balance <span class="op">=</span> v <span class="op">}</span>
+
+  <span class="kw">static</span> <span class="fn">open</span><span class="op">(</span>name<span class="op">:</span> <span class="ty">string</span><span class="op">):</span> <span class="ty">Account</span> <span class="op">{</span>
+    <span class="kw">return</span> <span class="kw">new</span> <span class="ty">Account</span><span class="op">(</span>name<span class="op">,</span> <span class="fn">crypto</span><span class="op">.</span><span class="fn">randomUUID</span><span class="op">())</span>
+  <span class="op">}</span>
+<span class="op">}</span></pre>
+
+  <h3>Abstract classes</h3>
+<pre><span class="kw">abstract class</span> <span class="ty">Animal</span> <span class="op">{</span>
+  <span class="kw">abstract</span> <span class="fn">speak</span><span class="op">():</span> <span class="ty">string</span>
+  <span class="fn">describe</span><span class="op">():</span> <span class="ty">string</span> <span class="op">{</span> <span class="kw">return</span> <span class="str">`I say </span><span class="op">${</span><span class="kw">this</span><span class="op">.</span><span class="fn">speak</span><span class="op">()}</span><span class="str">`</span> <span class="op">}</span>
+<span class="op">}</span></pre>
+
+  <h3>implements vs extends</h3>
+<pre><span class="kw">interface</span> <span class="ty">Logger</span> <span class="op">{</span> <span class="fn">log</span><span class="op">(</span>msg<span class="op">:</span> <span class="ty">string</span><span class="op">):</span> <span class="ty">void</span> <span class="op">}</span>
+<span class="kw">class</span> <span class="ty">ConsoleLogger</span> <span class="kw">implements</span> <span class="ty">Logger</span> <span class="op">{</span>
+  <span class="fn">log</span><span class="op">(</span>msg<span class="op">:</span> <span class="ty">string</span><span class="op">):</span> <span class="ty">void</span> <span class="op">{</span> <span class="fn">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span>msg<span class="op">)</span> <span class="op">}</span>
+<span class="op">}</span></pre>
+
+  <div class="note"><strong>Tip:</strong> prefer <code class="inline">#field</code> (ECMAScript private) over <code class="inline">private field</code> — the former is enforced at runtime, the latter only at compile time.</div>
+</section>
+
+<!-- ENUMS -->
+<section class="card" id="enums">
+  <h2><span class="icon">▸</span> Enums <a class="docs" href="https://www.typescriptlang.org/docs/handbook/enums.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="com">// Numeric enum</span>
+<span class="kw">enum</span> <span class="ty">Direction</span> <span class="op">{</span> Up<span class="op">,</span> Down<span class="op">,</span> Left<span class="op">,</span> Right <span class="op">}</span>
+
+<span class="com">// String enum (preferred — stable serialised values)</span>
+<span class="kw">enum</span> <span class="ty">Role</span> <span class="op">{</span>
+  Admin  <span class="op">=</span> <span class="str">"admin"</span><span class="op">,</span>
+  User   <span class="op">=</span> <span class="str">"user"</span><span class="op">,</span>
+  Guest  <span class="op">=</span> <span class="str">"guest"</span><span class="op">,</span>
+<span class="op">}</span>
+
+<span class="com">// const enum (inlined, no runtime object) — incompatible with isolatedModules</span>
+<span class="kw">const</span> <span class="kw">enum</span> <span class="ty">Flag</span> <span class="op">{</span> A <span class="op">=</span> <span class="num">1</span><span class="op">,</span> B <span class="op">=</span> <span class="num">2</span> <span class="op">}</span></pre>
+
+  <div class="note danger"><strong>Modern alternative:</strong> for new code, prefer a string-literal union + const object — works under <code class="inline">erasableSyntaxOnly</code> (5.8+) and avoids the runtime cost.
+<pre><span class="kw">const</span> Role <span class="op">=</span> <span class="op">{</span> Admin<span class="op">:</span> <span class="str">"admin"</span><span class="op">,</span> User<span class="op">:</span> <span class="str">"user"</span> <span class="op">}</span> <span class="kw">as</span> <span class="kw">const</span>
+<span class="kw">type</span> <span class="ty">Role</span> <span class="op">=</span> <span class="kw">typeof</span> Role<span class="op">[</span><span class="kw">keyof</span> <span class="kw">typeof</span> Role<span class="op">]</span></pre>
+  </div>
+</section>
+
+<!-- MODULES -->
+<section class="card" id="modules">
+  <h2><span class="icon">▸</span> Modules <a class="docs" href="https://www.typescriptlang.org/docs/handbook/2/modules.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="com">// Named</span>
+<span class="kw">export</span> <span class="kw">const</span> add <span class="op">=</span> <span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="op">=&gt;</span> a <span class="op">+</span> b
+<span class="kw">import</span> <span class="op">{</span> add <span class="op">}</span> <span class="kw">from</span> <span class="str">"./math.ts"</span>
+
+<span class="com">// Default</span>
+<span class="kw">export</span> <span class="kw">default</span> <span class="kw">class</span> <span class="ty">User</span> <span class="op">{}</span>
+<span class="kw">import</span> User <span class="kw">from</span> <span class="str">"./user.ts"</span>
+
+<span class="com">// Type-only — erased at runtime</span>
+<span class="kw">import</span> <span class="kw">type</span> <span class="op">{</span> <span class="ty">User</span> <span class="op">}</span> <span class="kw">from</span> <span class="str">"./user.ts"</span>
+<span class="kw">export</span> <span class="kw">type</span> <span class="op">{</span> <span class="ty">User</span> <span class="op">}</span>
+
+<span class="com">// Re-export</span>
+<span class="kw">export</span> <span class="op">*</span> <span class="kw">from</span> <span class="str">"./shapes.ts"</span>
+<span class="kw">export</span> <span class="op">{</span> add <span class="kw">as</span> sum <span class="op">}</span> <span class="kw">from</span> <span class="str">"./math.ts"</span></pre>
+
+  <h3>Import attributes <span style="color:var(--iris)">— 5.3+</span></h3>
+<pre><span class="kw">import</span> data <span class="kw">from</span> <span class="str">"./data.json"</span> <span class="kw">with</span> <span class="op">{</span> type<span class="op">:</span> <span class="str">"json"</span> <span class="op">}</span>
+<span class="kw">const</span> mod <span class="op">=</span> <span class="kw">await</span> <span class="fn">import</span><span class="op">(</span><span class="str">"./mod.ts"</span><span class="op">,</span> <span class="op">{</span> with<span class="op">:</span> <span class="op">{</span> type<span class="op">:</span> <span class="str">"json"</span> <span class="op">}</span> <span class="op">})</span></pre>
+
+  <h3>ESM relative imports under <code class="inline">nodenext</code></h3>
+<pre><span class="com">// Always include the extension — Node strips types, doesn't resolve</span>
+<span class="kw">import</span> <span class="op">{</span> add <span class="op">}</span> <span class="kw">from</span> <span class="str">"./math.ts"</span>   <span class="com">// or .js (transpiled)</span></pre>
+</section>
+
+<!-- ASYNC -->
+<section class="card" id="async">
+  <h2><span class="icon">▸</span> Async &amp; Promises <a class="docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html#the-awaited-type-and-promise-improvements" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">async function</span> <span class="fn">fetchUser</span><span class="op">(</span>id<span class="op">:</span> <span class="ty">string</span><span class="op">):</span> <span class="ty">Promise</span><span class="op">&lt;</span><span class="ty">User</span><span class="op">&gt;</span> <span class="op">{</span>
+  <span class="kw">const</span> res <span class="op">=</span> <span class="kw">await</span> <span class="fn">fetch</span><span class="op">(</span><span class="str">`/api/users/</span><span class="op">${</span>id<span class="op">}</span><span class="str">`</span><span class="op">)</span>
+  <span class="kw">if</span> <span class="op">(!</span>res<span class="op">.</span>ok<span class="op">)</span> <span class="kw">throw</span> <span class="kw">new</span> <span class="fn">Error</span><span class="op">(</span>res<span class="op">.</span>statusText<span class="op">)</span>
+  <span class="kw">return</span> res<span class="op">.</span><span class="fn">json</span><span class="op">()</span> <span class="kw">as</span> <span class="ty">Promise</span><span class="op">&lt;</span><span class="ty">User</span><span class="op">&gt;</span>
+<span class="op">}</span>
+
+<span class="com">// Awaited&lt;T&gt; — recursively unwraps</span>
+<span class="kw">type</span> <span class="ty">R</span> <span class="op">=</span> <span class="ty">Awaited</span><span class="op">&lt;</span><span class="ty">Promise</span><span class="op">&lt;</span><span class="ty">Promise</span><span class="op">&lt;</span><span class="ty">number</span><span class="op">&gt;&gt;&gt;</span>  <span class="com">// number</span>
+
+<span class="com">// Top-level await — module-only</span>
+<span class="kw">const</span> config <span class="op">=</span> <span class="kw">await</span> <span class="fn">loadConfig</span><span class="op">()</span></pre>
+
+  <h3>Promise.allSettled / .race / .any</h3>
+<pre><span class="kw">const</span> results <span class="op">=</span> <span class="kw">await</span> <span class="ty">Promise</span><span class="op">.</span><span class="fn">allSettled</span><span class="op">([</span><span class="fn">fetchUser</span><span class="op">(</span><span class="str">"a"</span><span class="op">),</span> <span class="fn">fetchUser</span><span class="op">(</span><span class="str">"b"</span><span class="op">)])</span>
+<span class="kw">for</span> <span class="op">(</span><span class="kw">const</span> r <span class="kw">of</span> results<span class="op">)</span> <span class="op">{</span>
+  <span class="kw">if</span> <span class="op">(</span>r<span class="op">.</span>status <span class="op">===</span> <span class="str">"fulfilled"</span><span class="op">)</span> <span class="op">...</span>r<span class="op">.</span>value
+  <span class="kw">else</span> <span class="op">...</span>r<span class="op">.</span>reason
+<span class="op">}</span></pre>
+</section>
+
+<!-- DECORATORS -->
+<section class="card" id="decorators">
+  <h2><span class="icon">▸</span> Decorators <span class="tag">stage 3 · 5.0+</span> <a class="docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html#decorators" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">function</span> <span class="fn">logged</span><span class="op">&lt;</span><span class="ty">This</span><span class="op">,</span> <span class="ty">Args</span> <span class="kw">extends</span> <span class="ty">unknown</span><span class="op">[],</span> <span class="ty">R</span><span class="op">&gt;(</span>
+  target<span class="op">:</span> <span class="op">(</span><span class="kw">this</span><span class="op">:</span> <span class="ty">This</span><span class="op">,</span> <span class="op">...</span>args<span class="op">:</span> <span class="ty">Args</span><span class="op">)</span> <span class="op">=&gt;</span> <span class="ty">R</span><span class="op">,</span>
+  context<span class="op">:</span> <span class="ty">ClassMethodDecoratorContext</span><span class="op">&lt;</span><span class="ty">This</span><span class="op">,</span> <span class="op">(</span><span class="kw">this</span><span class="op">:</span> <span class="ty">This</span><span class="op">,</span> <span class="op">...</span>args<span class="op">:</span> <span class="ty">Args</span><span class="op">)</span> <span class="op">=&gt;</span> <span class="ty">R</span><span class="op">&gt;</span>
+<span class="op">)</span> <span class="op">{</span>
+  <span class="kw">return</span> <span class="kw">function</span> <span class="op">(</span><span class="kw">this</span><span class="op">:</span> <span class="ty">This</span><span class="op">,</span> <span class="op">...</span>args<span class="op">:</span> <span class="ty">Args</span><span class="op">):</span> <span class="ty">R</span> <span class="op">{</span>
+    <span class="fn">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">`call </span><span class="op">${</span><span class="ty">String</span><span class="op">(</span>context<span class="op">.</span>name<span class="op">)}</span><span class="str">`</span><span class="op">,</span> args<span class="op">)</span>
+    <span class="kw">return</span> target<span class="op">.</span><span class="fn">call</span><span class="op">(</span><span class="kw">this</span><span class="op">,</span> <span class="op">...</span>args<span class="op">)</span>
+  <span class="op">}</span>
+<span class="op">}</span>
+
+<span class="kw">class</span> <span class="ty">Api</span> <span class="op">{</span>
+  <span class="op">@</span><span class="fn">logged</span>
+  <span class="fn">fetch</span><span class="op">(</span>id<span class="op">:</span> <span class="ty">string</span><span class="op">)</span> <span class="op">{</span> <span class="op">...</span> <span class="op">}</span>
+<span class="op">}</span></pre>
+
+  <h3>Decorator context types</h3>
+  <ul>
+    <li><code class="inline">ClassDecoratorContext</code></li>
+    <li><code class="inline">ClassMethodDecoratorContext</code></li>
+    <li><code class="inline">ClassFieldDecoratorContext</code></li>
+    <li><code class="inline">ClassGetterDecoratorContext</code> / <code class="inline">…Setter…</code></li>
+    <li><code class="inline">ClassAccessorDecoratorContext</code></li>
+  </ul>
+
+  <div class="note"><strong>Note:</strong> standard decorators (5.0+) are different from the legacy <code class="inline">experimentalDecorators</code> form. They aren't compatible — pick one. Standard is the future.</div>
+</section>
+
+<!-- USING -->
+<section class="card" id="using">
+  <h2><span class="icon">▸</span> using &amp; resource management <span class="tag">5.2+</span> <a class="docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-2.html#using-declarations-and-explicit-resource-management" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="kw">class</span> <span class="ty">FileHandle</span> <span class="op">{</span>
+  <span class="fn">constructor</span><span class="op">(</span><span class="kw">public</span> path<span class="op">:</span> <span class="ty">string</span><span class="op">)</span> <span class="op">{}</span>
+  <span class="op">[</span><span class="ty">Symbol</span><span class="op">.</span>dispose<span class="op">]()</span> <span class="op">{</span>
+    <span class="fn">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">`closing </span><span class="op">${</span><span class="kw">this</span><span class="op">.</span>path<span class="op">}</span><span class="str">`</span><span class="op">)</span>
+  <span class="op">}</span>
+<span class="op">}</span>
+
+<span class="kw">function</span> <span class="fn">readConfig</span><span class="op">()</span> <span class="op">{</span>
+  <span class="kw">using</span> handle <span class="op">=</span> <span class="kw">new</span> <span class="ty">FileHandle</span><span class="op">(</span><span class="str">"/etc/app.conf"</span><span class="op">)</span>
+  <span class="com">// ... do work ...</span>
+  <span class="com">// handle[Symbol.dispose]() runs here automatically</span>
+<span class="op">}</span>
+
+<span class="com">// Async variant</span>
+<span class="kw">await</span> <span class="kw">using</span> conn <span class="op">=</span> <span class="kw">await</span> <span class="fn">openConnection</span><span class="op">()</span>
+<span class="com">// conn[Symbol.asyncDispose]() awaited at scope exit</span></pre>
+
+  <h3>Helper types</h3>
+<pre><span class="ty">Disposable</span>       <span class="com">// has [Symbol.dispose]()</span>
+<span class="ty">AsyncDisposable</span>  <span class="com">// has [Symbol.asyncDispose](): Promise&lt;void&gt;</span></pre>
+</section>
+
+<!-- TSCONFIG -->
+<section class="card" id="tsconfig">
+  <h2><span class="icon">▸</span> tsconfig essentials <a class="docs" href="https://www.typescriptlang.org/tsconfig" target="_blank" rel="noopener">docs ↗</a></h2>
+
+<pre><span class="op">{</span>
+  <span class="str">"compilerOptions"</span><span class="op">:</span> <span class="op">{</span>
+    <span class="str">"target"</span><span class="op">:</span> <span class="str">"ES2024"</span><span class="op">,</span>
+    <span class="str">"module"</span><span class="op">:</span> <span class="str">"nodenext"</span><span class="op">,</span>
+    <span class="str">"moduleResolution"</span><span class="op">:</span> <span class="str">"nodenext"</span><span class="op">,</span>
+    <span class="str">"lib"</span><span class="op">:</span> <span class="op">[</span><span class="str">"ES2024"</span><span class="op">],</span>
+
+    <span class="str">"strict"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"noUncheckedIndexedAccess"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"exactOptionalPropertyTypes"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"noImplicitOverride"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"noFallthroughCasesInSwitch"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"noPropertyAccessFromIndexSignature"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+
+    <span class="str">"verbatimModuleSyntax"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"isolatedModules"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"erasableSyntaxOnly"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>     <span class="com">// 5.8+ : forbid enums, namespaces, etc.</span>
+    <span class="str">"allowImportingTsExtensions"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"rewriteRelativeImportExtensions"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span> <span class="com">// 5.7+ : .ts → .js on emit</span>
+
+    <span class="str">"skipLibCheck"</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span>
+    <span class="str">"noEmit"</span><span class="op">:</span> <span class="kw">true</span>
+  <span class="op">}</span>
+<span class="op">}</span></pre>
+
+  <h3>Strict family (turned on by <code class="inline">"strict": true</code>)</h3>
+  <table>
+    <tr><th>Flag</th><th>What it does</th></tr>
+    <tr><td><code>noImplicitAny</code></td><td>error on inferred <code>any</code></td></tr>
+    <tr><td><code>strictNullChecks</code></td><td><code>null</code>/<code>undefined</code> not assignable to others</td></tr>
+    <tr><td><code>strictFunctionTypes</code></td><td>contravariant param check</td></tr>
+    <tr><td><code>strictBindCallApply</code></td><td>type-check <code>.bind/.call/.apply</code></td></tr>
+    <tr><td><code>strictPropertyInitialization</code></td><td>class fields must be assigned</td></tr>
+    <tr><td><code>alwaysStrict</code></td><td>emit <code>"use strict"</code></td></tr>
+    <tr><td><code>useUnknownInCatchVariables</code></td><td><code>catch (e: unknown)</code></td></tr>
+  </table>
+</section>
+
+<!-- WHAT'S NEW -->
+<section class="card" id="new">
+  <h2><span class="icon">▸</span> What's new — 5.x → 6.0 <a class="docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/overview.html" target="_blank" rel="noopener">docs ↗</a></h2>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html" target="_blank" rel="noopener">6.0</a> <span style="color:var(--gold)">(current)</span></h3>
+  <ul>
+    <li>Deprecation warnings for <code class="inline">outFile</code>, <code class="inline">module: UMD/AMD/System</code>, <code class="inline">moduleResolution: classic</code>, <code class="inline">target: ES5</code>. All scheduled for removal in 7.0.</li>
+    <li>Escape hatch: <code class="inline">"ignoreDeprecations": "6.0"</code> in tsconfig.</li>
+    <li>Many internal perf wins, faster project loading.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html" target="_blank" rel="noopener">5.8</a></h3>
+  <ul>
+    <li><code class="inline">--erasableSyntaxOnly</code> — bans constructs that can't be type-stripped (enums, namespaces, parameter properties).</li>
+    <li>Granular conditional return checks; better narrowing on nested returns.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-7.html" target="_blank" rel="noopener">5.7</a></h3>
+  <ul>
+    <li><code class="inline">--rewriteRelativeImportExtensions</code> — emit-time <code class="inline">.ts → .js</code> rewriting (lets you import with the source extension).</li>
+    <li>Never-initialized variable diagnostics.</li>
+    <li>Path-based <code class="inline">tsconfig.json</code> inheritance via <code class="inline">extends</code>.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-6.html" target="_blank" rel="noopener">5.6</a></h3>
+  <ul>
+    <li>Disallowed implicit nullish/truthy comparisons (<code class="inline">if (regex)</code> → warns).</li>
+    <li>Iterator helper methods typed (<code class="inline">.map</code>, <code class="inline">.filter</code> on iterators).</li>
+    <li>Strict checks on built-in iterator return types.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-5.html" target="_blank" rel="noopener">5.5</a></h3>
+  <ul>
+    <li><strong>Inferred type predicates</strong> — <code class="inline">.filter(x =&gt; x != null)</code> now narrows.</li>
+    <li>Regex syntax validation at compile time.</li>
+    <li><code class="inline">--isolatedDeclarations</code> — fast <code class="inline">.d.ts</code> emit without full type-check.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-4.html" target="_blank" rel="noopener">5.4</a></h3>
+  <ul>
+    <li><code class="inline">NoInfer&lt;T&gt;</code> intrinsic.</li>
+    <li>Preserved narrowing inside closures after last assignment.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-3.html" target="_blank" rel="noopener">5.3</a></h3>
+  <ul>
+    <li>Import attributes: <code class="inline">import x from "./y" with { type: "json" }</code>.</li>
+    <li>Narrowing using <code class="inline">Symbol.hasInstance</code>.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-2.html" target="_blank" rel="noopener">5.2</a></h3>
+  <ul>
+    <li><code class="inline">using</code> &amp; <code class="inline">await using</code> declarations; <code class="inline">Disposable</code>, <code class="inline">AsyncDisposable</code>.</li>
+    <li>Decorator metadata (<code class="inline">context.metadata</code>).</li>
+    <li>Copying array methods: <code class="inline">.toSorted()</code>, <code class="inline">.toReversed()</code>, <code class="inline">.toSpliced()</code>, <code class="inline">.with()</code>.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-1.html" target="_blank" rel="noopener">5.1</a></h3>
+  <ul>
+    <li>Easier return inference (functions returning <code class="inline">undefined</code>).</li>
+    <li>Namespaced JSX attributes.</li>
+  </ul>
+
+  <h3><a class="inline-docs" href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html" target="_blank" rel="noopener">5.0</a></h3>
+  <ul>
+    <li>Stage-3 <strong>decorators</strong>.</li>
+    <li><code class="inline">const</code> type parameters.</li>
+    <li>All enums become union enums.</li>
+    <li><code class="inline">--moduleResolution bundler</code>.</li>
+    <li><code class="inline">verbatimModuleSyntax</code>.</li>
+  </ul>
+</section>
+
+</div>
+</main>
+
+<footer>
+  TypeScript <strong>v6.0.3</strong> cheatsheet · Rose Pine theme<br>
+  Official references:
+  <a href="https://www.typescriptlang.org/docs/handbook/intro.html" target="_blank" rel="noopener">Handbook</a> ·
+  <a href="https://www.typescriptlang.org/docs/handbook/release-notes/overview.html" target="_blank" rel="noopener">Release notes</a> ·
+  <a href="https://www.typescriptlang.org/tsconfig" target="_blank" rel="noopener">tsconfig reference</a> ·
+  <a href="https://www.typescriptlang.org/docs/handbook/utility-types.html" target="_blank" rel="noopener">Utility types</a> ·
+  <a href="https://www.typescriptlang.org/play" target="_blank" rel="noopener">Playground</a> ·
+  <a href="https://github.com/microsoft/TypeScript" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+<script src="cheatsheets/app.js"></script>
+
+</body>
+</html>

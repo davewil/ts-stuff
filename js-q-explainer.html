@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JS event-loop explainer — why does src/js-q.js print A H D F G B C E?</title>
+<link rel="stylesheet" href="cheatsheets/styles.css">
+<style>
+  /* JS syntax token colors */
+  pre .kw     { color: var(--iris); font-weight: 600; }   /* console, return, etc. */
+  pre .bi     { color: var(--foam); }                     /* built-ins: Promise, setTimeout */
+  pre .fn     { color: var(--rose); }                     /* method names */
+  pre .str    { color: var(--gold); }                     /* string literals */
+  pre .num    { color: var(--rose); }                     /* numeric literals */
+  pre .com    { color: var(--muted); font-style: italic; }/* comments */
+  pre .op     { color: var(--subtle); }                   /* operators, punctuation */
+  pre .step   { color: var(--gold); font-weight: 700; }   /* [1] [2] step markers */
+  pre .out    { color: var(--pine); font-weight: 700; }   /* current output buffer */
+
+  /* Big highlighted answer line */
+  .answer {
+    font-family: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 1.8rem;
+    letter-spacing: 0.4em;
+    color: var(--rose);
+    background: var(--overlay);
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    border-left: 4px solid var(--gold);
+    margin: 0.5rem 0 0.8rem;
+    text-align: center;
+  }
+  .answer .sep { color: var(--muted); margin: 0 0.15em; }
+
+  /* Phase pills */
+  .phase {
+    display: inline-block;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    background: var(--overlay);
+    border: 1px solid var(--highlight-med);
+    color: var(--foam);
+    font-family: "JetBrains Mono", monospace;
+    margin-right: 0.4rem;
+  }
+  .phase.sync   { border-color: var(--gold); color: var(--gold); }
+  .phase.micro  { border-color: var(--iris); color: var(--iris); }
+  .phase.macro  { border-color: var(--love); color: var(--love); }
+
+  /* Queue boxes shown together */
+  .queues {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.6rem;
+    margin: 0.5rem 0 0.7rem;
+  }
+  .queue {
+    background: var(--overlay);
+    border: 1px solid var(--highlight-med);
+    border-radius: 6px;
+    padding: 0.5rem 0.7rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.85rem;
+  }
+  .queue .label {
+    display: block;
+    color: var(--subtle);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.3rem;
+  }
+  .queue .items { color: var(--text); min-height: 1.2em; }
+  .queue.stack  { border-left: 3px solid var(--gold); }
+  .queue.micro  { border-left: 3px solid var(--iris); }
+  .queue.macro  { border-left: 3px solid var(--love); }
+  .queue.out    { border-left: 3px solid var(--pine); }
+  .queue .empty { color: var(--muted); font-style: italic; }
+
+  /* Trace table styling */
+  .trace-card { grid-column: 1 / -1; }  /* full row */
+  table.trace { font-size: 0.83rem; }
+  table.trace th { white-space: nowrap; }
+  table.trace td { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
+  table.trace td.action { font-family: inherit; }
+  table.trace tr.sync td:first-child  { border-left: 3px solid var(--gold); }
+  table.trace tr.micro td:first-child { border-left: 3px solid var(--iris); }
+  table.trace tr.macro td:first-child { border-left: 3px solid var(--love); }
+  table.trace td .out { color: var(--pine); font-weight: 700; }
+  table.trace td .new { color: var(--rose); }
+
+  /* ASCII flow diagram */
+  pre.diagram {
+    background: var(--overlay);
+    color: var(--subtle);
+    line-height: 1.35;
+    border-left: 3px solid var(--iris);
+  }
+  pre.diagram .stack  { color: var(--gold); }
+  pre.diagram .micro  { color: var(--iris); }
+  pre.diagram .macro  { color: var(--love); }
+  pre.diagram .arrow  { color: var(--rose); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Event-loop <span class="accent">explainer</span></h1>
+  <p>Why does <code class="inline">src/js-q.js</code> print <strong style="color:var(--rose)">A H D F G B C E</strong> — a step-by-step trace through the JavaScript runtime. <a class="inline-docs" href="js-q-2-explainer.html">Part 2 →</a> · <a class="inline-docs" href="await-explainer.html">Part 3 →</a></p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#code">The code</a>
+  <a href="#answer">Answer</a>
+  <a href="#model">Mental model</a>
+  <a href="#sync">Phase 1 · sync</a>
+  <a href="#microtasks">Phase 2 · microtasks</a>
+  <a href="#timer1">Phase 3 · timer T1</a>
+  <a href="#timer2">Phase 4 · timer T2</a>
+  <a href="#trace">Full trace</a>
+  <a href="#whyg">Why G before B</a>
+  <a href="#whyc">Why C between B and E</a>
+  <a href="#whye">Why E last</a>
+  <a href="#gotchas">Gotchas</a>
+  <a href="#further">Further reading</a>
+</nav>
+
+<main>
+<div class="grid">
+
+<!-- THE CODE -->
+<section class="card" id="code">
+  <h2><span class="icon">▸</span> The code (annotated)</h2>
+  <p>I've added step markers <span style="color:var(--gold);font-weight:700">[1]–[5]</span> for the synchronous-phase events and labels <span style="color:var(--gold);font-weight:700">T1/T2</span> (timers) and <span style="color:var(--gold);font-weight:700">M1–M4</span> (microtasks) so we can reference them later.</p>
+
+<pre><span class="com">// What order will the letters be printed in?</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A'</span><span class="op">);</span>                        <span class="step">// [1] sync</span>
+
+<span class="bi">setTimeout</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="op">{</span>                    <span class="step">// [2] schedule T1</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B'</span><span class="op">);</span>
+  <span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">().</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="op">{</span>      <span class="step">//    inside T1 → queue M3</span>
+    <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'C'</span><span class="op">);</span>
+  <span class="op">});</span>
+<span class="op">},</span> <span class="num">0</span><span class="op">);</span>
+
+<span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">().</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="op">{</span>          <span class="step">// [3] queue M1</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'D'</span><span class="op">);</span>
+  <span class="bi">setTimeout</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="op">{</span>                  <span class="step">//    inside M1 → schedule T2</span>
+    <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'E'</span><span class="op">);</span>
+  <span class="op">},</span> <span class="num">0</span><span class="op">);</span>
+<span class="op">})</span>
+
+<span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">().</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="op">{</span>          <span class="step">// [4] queue M2</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'F'</span><span class="op">);</span>
+  <span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">().</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="op">{</span>      <span class="step">//    inside M2 → queue M4</span>
+    <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'G'</span><span class="op">);</span>
+  <span class="op">});</span>
+<span class="op">})</span>
+
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'H'</span><span class="op">)</span>                          <span class="step">// [5] sync</span></pre>
+</section>
+
+<!-- ANSWER -->
+<section class="card" id="answer">
+  <h2><span class="icon">▸</span> The answer</h2>
+  <p>The output, in order:</p>
+  <div class="answer">A<span class="sep">·</span>H<span class="sep">·</span>D<span class="sep">·</span>F<span class="sep">·</span>G<span class="sep">·</span>B<span class="sep">·</span>C<span class="sep">·</span>E</div>
+  <p>One-sentence summary: <strong>all synchronous logs first, then drain every microtask (including any queued mid-drain), then process timer callbacks one at a time — each timer's microtasks drain between timer invocations</strong>.</p>
+  <div class="note"><strong>Quick map:</strong>
+    <ul style="margin:0.3rem 0 0">
+      <li><strong>A, H</strong> — synchronous <code class="inline">console.log</code> calls run in source order.</li>
+      <li><strong>D, F, G</strong> — three microtasks: M1, M2, and M4 (queued by M2 during the drain).</li>
+      <li><strong>B</strong> — the first <code class="inline">setTimeout</code> callback (T1) fires.</li>
+      <li><strong>C</strong> — microtask M3 (queued inside T1) drains before any other timer runs.</li>
+      <li><strong>E</strong> — the second <code class="inline">setTimeout</code> callback (T2) fires last; it was scheduled later than T1.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- MENTAL MODEL -->
+<section class="card" id="model">
+  <h2><span class="icon">▸</span> Mental model</h2>
+  <p>JavaScript is single-threaded with three buckets that the runtime cycles between:</p>
+
+<pre class="diagram">  ┌────────────────────────────────────────┐
+  │  <span class="stack">CALL STACK</span>                            │  ← sync code (LIFO)
+  │  console.log, setTimeout(…), …          │
+  └────────────────┬───────────────────────┘
+                   │  stack empty?
+                   ▼
+  ┌────────────────────────────────────────┐
+  │  <span class="micro">MICROTASK QUEUE</span>  (drain ALL, FIFO)    │
+  │  Promise .then/.catch/.finally          │
+  │  queueMicrotask, MutationObserver       │
+  └────────────────┬───────────────────────┘
+                   │  empty?
+                   ▼
+  ┌────────────────────────────────────────┐
+  │  <span class="macro">MACROTASK QUEUE</span>  (take ONE, FIFO)     │
+  │  setTimeout, setInterval, I/O,          │
+  │  setImmediate, message events, …        │
+  └────────────────┬───────────────────────┘
+                   │
+                   <span class="arrow">└─→  back to MICROTASK drain</span></pre>
+
+  <div class="note"><strong>The golden rule:</strong> after the stack empties (or after every macrotask completes), the runtime drains the microtask queue <em>completely</em> — including any microtasks that get queued while draining — before picking up the next macrotask.</div>
+
+  <h3>Three queue shapes in this program</h3>
+  <ul>
+    <li><strong>Call stack</strong> — runs <code class="inline">[1]</code> through <code class="inline">[5]</code> top-to-bottom synchronously.</li>
+    <li><strong>Microtask queue</strong> — collects M1, M2 during sync; M4 gets added during drain; M3 added later from inside T1.</li>
+    <li><strong>Macrotask queue (Timers)</strong> — collects T1 during sync, T2 during the microtask drain.</li>
+  </ul>
+</section>
+
+<!-- PHASE 1: SYNC -->
+<section class="card" id="sync">
+  <h2><span class="icon">▸</span> <span class="phase sync">Phase 1</span> Synchronous execution</h2>
+  <p>The runtime starts at the top of the file and runs every statement on the call stack until it returns. <em>Scheduling</em> a callback (setTimeout, .then) is itself synchronous — only the body of the callback is deferred.</p>
+
+  <div class="queues">
+    <div class="queue stack"><span class="label">Call stack</span><span class="items">running…</span></div>
+    <div class="queue micro"><span class="label">Microtask Q</span><span class="items empty">empty</span></div>
+    <div class="queue macro"><span class="label">Macrotask Q</span><span class="items empty">empty</span></div>
+    <div class="queue out"><span class="label">Output</span><span class="items empty">∅</span></div>
+  </div>
+
+  <h3>Step-by-step</h3>
+  <ol>
+    <li><strong>[1]</strong> <code class="inline">console.log('A')</code> → <strong>logs A</strong>.</li>
+    <li><strong>[2]</strong> <code class="inline">setTimeout(…, 0)</code> registers timer <strong>T1</strong>. Note: T1's body is <em>not</em> executed yet — it's stashed in the macrotask queue.</li>
+    <li><strong>[3]</strong> <code class="inline">Promise.resolve().then(…)</code> queues microtask <strong>M1</strong> immediately (the promise is already resolved).</li>
+    <li><strong>[4]</strong> Another <code class="inline">Promise.resolve().then(…)</code> queues microtask <strong>M2</strong>.</li>
+    <li><strong>[5]</strong> <code class="inline">console.log('H')</code> → <strong>logs H</strong>.</li>
+  </ol>
+
+  <div class="queues">
+    <div class="queue stack"><span class="label">Call stack</span><span class="items empty">empty</span></div>
+    <div class="queue micro"><span class="label">Microtask Q</span><span class="items">[M1, M2]</span></div>
+    <div class="queue macro"><span class="label">Macrotask Q</span><span class="items">[T1]</span></div>
+    <div class="queue out"><span class="label">Output</span><span class="items"><span style="color:var(--pine)">A H</span></span></div>
+  </div>
+</section>
+
+<!-- PHASE 2: MICROTASKS -->
+<section class="card" id="microtasks">
+  <h2><span class="icon">▸</span> <span class="phase micro">Phase 2</span> Drain the microtask queue</h2>
+  <p>The synchronous phase ended with the stack empty. Before touching any timer, the runtime drains every microtask — and any microtasks those microtasks queue, and so on, until the queue is genuinely empty.</p>
+
+  <h3>M1 runs</h3>
+<pre><span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'D'</span><span class="op">);</span>                  <span class="com">// logs D</span>
+<span class="bi">setTimeout</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="op">{</span> <span class="op">...</span> <span class="op">},</span> <span class="num">0</span><span class="op">);</span>     <span class="com">// schedules T2 → macroQ: [T1, T2]</span></pre>
+  <p>After M1: <code class="inline">output = "A H D"</code>, microQ <code class="inline">[M2]</code>, macroQ <code class="inline">[T1, T2]</code>.</p>
+
+  <h3>M2 runs</h3>
+<pre><span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'F'</span><span class="op">);</span>                  <span class="com">// logs F</span>
+<span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">().</span><span class="fn">then</span><span class="op">(...);</span>      <span class="com">// queues M4 (still during drain!)</span></pre>
+  <p>After M2: <code class="inline">output = "A H D F"</code>, microQ <code class="inline">[M4]</code> — <strong>the drain isn't done yet</strong> because M4 was added before the queue went empty.</p>
+
+  <h3>M4 runs</h3>
+<pre><span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'G'</span><span class="op">);</span>                  <span class="com">// logs G</span></pre>
+  <p>After M4: <code class="inline">output = "A H D F G"</code>, microQ <code class="inline">[]</code>. <strong>Drain complete.</strong></p>
+
+  <div class="queues">
+    <div class="queue stack"><span class="label">Call stack</span><span class="items empty">empty</span></div>
+    <div class="queue micro"><span class="label">Microtask Q</span><span class="items empty">empty</span></div>
+    <div class="queue macro"><span class="label">Macrotask Q</span><span class="items">[T1, T2]</span></div>
+    <div class="queue out"><span class="label">Output</span><span class="items"><span style="color:var(--pine)">A H D F G</span></span></div>
+  </div>
+</section>
+
+<!-- PHASE 3: T1 -->
+<section class="card" id="timer1">
+  <h2><span class="icon">▸</span> <span class="phase macro">Phase 3</span> First timer — T1</h2>
+  <p>Microtask queue is now empty. The runtime pulls the next macrotask: <strong>T1</strong> (the first <code class="inline">setTimeout</code>, scheduled in step [2] during the sync phase).</p>
+
+  <h3>T1 body runs</h3>
+<pre><span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B'</span><span class="op">);</span>                  <span class="com">// logs B</span>
+<span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">().</span><span class="fn">then</span><span class="op">(...);</span>      <span class="com">// queues M3</span></pre>
+  <p>After T1: <code class="inline">output = "A H D F G B"</code>, microQ <code class="inline">[M3]</code>, macroQ <code class="inline">[T2]</code>.</p>
+
+  <h3>Drain microtasks again</h3>
+  <p>After every macrotask completes, the microtask queue is drained — that's the golden rule. So M3 fires immediately, before T2 gets a chance.</p>
+<pre><span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'C'</span><span class="op">);</span>                  <span class="com">// logs C</span></pre>
+
+  <div class="queues">
+    <div class="queue stack"><span class="label">Call stack</span><span class="items empty">empty</span></div>
+    <div class="queue micro"><span class="label">Microtask Q</span><span class="items empty">empty</span></div>
+    <div class="queue macro"><span class="label">Macrotask Q</span><span class="items">[T2]</span></div>
+    <div class="queue out"><span class="label">Output</span><span class="items"><span style="color:var(--pine)">A H D F G B C</span></span></div>
+  </div>
+</section>
+
+<!-- PHASE 4: T2 -->
+<section class="card" id="timer2">
+  <h2><span class="icon">▸</span> <span class="phase macro">Phase 4</span> Second timer — T2</h2>
+  <p>The runtime pulls the next macrotask: <strong>T2</strong>, which was scheduled <em>during M1</em> in Phase 2. Its body simply logs E.</p>
+
+<pre><span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'E'</span><span class="op">);</span>                  <span class="com">// logs E</span></pre>
+
+  <p>No microtasks were queued during T2, so the drain on exit is a no-op. The macrotask queue is empty. Program ends.</p>
+
+  <div class="queues">
+    <div class="queue stack"><span class="label">Call stack</span><span class="items empty">empty</span></div>
+    <div class="queue micro"><span class="label">Microtask Q</span><span class="items empty">empty</span></div>
+    <div class="queue macro"><span class="label">Macrotask Q</span><span class="items empty">empty</span></div>
+    <div class="queue out"><span class="label">Output</span><span class="items"><span style="color:var(--pine)">A H D F G B C E</span></span></div>
+  </div>
+</section>
+
+<!-- FULL TRACE -->
+<section class="card trace-card" id="trace">
+  <h2><span class="icon">▸</span> Full execution trace</h2>
+  <p>Every state transition from start to finish. Each row is one bite of work — running a frame on the call stack, a microtask, or a macrotask. <code class="inline">+x</code> = queued, <code class="inline">-x</code> = dequeued.</p>
+
+  <table class="trace">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Phase</th>
+        <th class="action">Action</th>
+        <th>Call stack</th>
+        <th>Microtask Q</th>
+        <th>Macrotask Q</th>
+        <th>Output so far</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="sync"><td>1</td><td><span class="phase sync">sync</span></td><td class="action">[1] log <code>'A'</code></td><td>[A]</td><td>[]</td><td>[]</td><td><span class="out">A</span></td></tr>
+      <tr class="sync"><td>2</td><td><span class="phase sync">sync</span></td><td class="action">[2] schedule T1 <span class="new">+T1</span></td><td>[setTimeout]</td><td>[]</td><td>[T1]</td><td><span class="out">A</span></td></tr>
+      <tr class="sync"><td>3</td><td><span class="phase sync">sync</span></td><td class="action">[3] queue M1 <span class="new">+M1</span></td><td>[then]</td><td>[M1]</td><td>[T1]</td><td><span class="out">A</span></td></tr>
+      <tr class="sync"><td>4</td><td><span class="phase sync">sync</span></td><td class="action">[4] queue M2 <span class="new">+M2</span></td><td>[then]</td><td>[M1, M2]</td><td>[T1]</td><td><span class="out">A</span></td></tr>
+      <tr class="sync"><td>5</td><td><span class="phase sync">sync</span></td><td class="action">[5] log <code>'H'</code></td><td>[H]</td><td>[M1, M2]</td><td>[T1]</td><td><span class="out">A H</span></td></tr>
+      <tr><td colspan="7" style="color:var(--muted); font-style:italic; text-align:center; background:var(--highlight-low)">— stack empty → drain microtasks —</td></tr>
+      <tr class="micro"><td>6</td><td><span class="phase micro">micro</span></td><td class="action">M1: log <code>'D'</code>, schedule T2 <span class="new">+T2</span></td><td>[M1]</td><td>[M2]</td><td>[T1, T2]</td><td><span class="out">A H D</span></td></tr>
+      <tr class="micro"><td>7</td><td><span class="phase micro">micro</span></td><td class="action">M2: log <code>'F'</code>, queue M4 <span class="new">+M4</span></td><td>[M2]</td><td>[M4]</td><td>[T1, T2]</td><td><span class="out">A H D F</span></td></tr>
+      <tr class="micro"><td>8</td><td><span class="phase micro">micro</span></td><td class="action">M4: log <code>'G'</code></td><td>[M4]</td><td>[]</td><td>[T1, T2]</td><td><span class="out">A H D F G</span></td></tr>
+      <tr><td colspan="7" style="color:var(--muted); font-style:italic; text-align:center; background:var(--highlight-low)">— microtasks drained → take next macrotask —</td></tr>
+      <tr class="macro"><td>9</td><td><span class="phase macro">macro</span></td><td class="action">T1: log <code>'B'</code>, queue M3 <span class="new">+M3</span></td><td>[T1]</td><td>[M3]</td><td>[T2]</td><td><span class="out">A H D F G B</span></td></tr>
+      <tr><td colspan="7" style="color:var(--muted); font-style:italic; text-align:center; background:var(--highlight-low)">— after every macrotask → drain microtasks —</td></tr>
+      <tr class="micro"><td>10</td><td><span class="phase micro">micro</span></td><td class="action">M3: log <code>'C'</code></td><td>[M3]</td><td>[]</td><td>[T2]</td><td><span class="out">A H D F G B C</span></td></tr>
+      <tr><td colspan="7" style="color:var(--muted); font-style:italic; text-align:center; background:var(--highlight-low)">— microtasks drained → take next macrotask —</td></tr>
+      <tr class="macro"><td>11</td><td><span class="phase macro">macro</span></td><td class="action">T2: log <code>'E'</code></td><td>[T2]</td><td>[]</td><td>[]</td><td><span class="out">A H D F G B C E</span></td></tr>
+      <tr><td colspan="7" style="color:var(--muted); font-style:italic; text-align:center; background:var(--highlight-low)">— queues all empty → program exits —</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- WHY G BEFORE B -->
+<section class="card" id="whyg">
+  <h2><span class="icon">▸</span> Why does <strong style="color:var(--rose)">G</strong> print before <strong style="color:var(--rose)">B</strong>?</h2>
+  <p>This is the trickiest line of the trace. Both G and B come from <em>scheduled</em> callbacks — but one is a microtask and the other is a macrotask.</p>
+
+  <ul>
+    <li><strong>G</strong> is queued by M2, <em>while the microtask queue is being drained</em>.</li>
+    <li><strong>B</strong> is the first <code class="inline">setTimeout</code> callback (T1), waiting in the macrotask queue.</li>
+  </ul>
+
+  <p>The rule: the microtask drain doesn't stop until the queue is <em>empty at the moment of inspection</em>. M2 adds M4 to a queue that's currently being processed, so M4 (G) becomes part of the same drain. Only after M4 finishes and the queue is genuinely empty does the runtime advance to the macrotask queue.</p>
+
+  <div class="note danger"><strong>Practical hazard:</strong> A chain of microtasks that keeps queueing more microtasks can starve the macrotask queue forever — timers never fire, I/O callbacks never run. This is called <em>microtask starvation</em>. Avoid <code class="inline">while (true) queueMicrotask(...)</code> patterns.</div>
+</section>
+
+<!-- WHY C BETWEEN B AND E -->
+<section class="card" id="whyc">
+  <h2><span class="icon">▸</span> Why is <strong style="color:var(--rose)">C</strong> sandwiched between B and E?</h2>
+  <p>C is microtask M3, queued <em>inside T1</em>. By the time it's queued, the drain that processed D/F/G has already finished — so M3 wasn't part of <em>that</em> drain.</p>
+
+  <p>But here's the second half of the rule: <strong>microtasks drain after every macrotask, not just after the synchronous phase</strong>. So as soon as T1 returns control to the runtime, the loop checks the microtask queue and finds M3 waiting. M3 fires <em>before</em> T2 gets to run, even though both were waiting at that point.</p>
+
+  <pre>T1 starts  →  log B  →  queue M3  →  T1 returns
+                                       ↓
+                            <span style="color:var(--iris)">drain microtasks → M3 fires → log C</span>
+                                       ↓
+                            T2 starts  →  log E</pre>
+
+  <div class="note new"><strong>Generalisation:</strong> if you queue a Promise.then inside a setTimeout callback, the .then always fires <em>immediately</em> after that callback returns — never after a competing timer that's already in the queue.</div>
+</section>
+
+<!-- WHY E LAST -->
+<section class="card" id="whye">
+  <h2><span class="icon">▸</span> Why does <strong style="color:var(--rose)">E</strong> come last?</h2>
+  <p>E is T2's body. T2 was scheduled <em>during Phase 2</em> (inside M1) — so its 0 ms timer started ticking <em>after</em> T1's. By the time the runtime is ready to dequeue timers, both T1 and T2 have elapsed, but they fire in the order they were registered.</p>
+
+  <p>Timers with the same delay form a FIFO queue. T1 was registered first (synchronously in the sync phase), T2 second (inside a microtask). So T1 fires first, then T2.</p>
+
+  <div class="note"><strong>Subtle point:</strong> <code class="inline">setTimeout(fn, 0)</code> doesn't mean "next tick" — it means "after the call stack clears, after all microtasks drain, after any earlier-scheduled timers have fired, and after the minimum delay (typically 1 ms in Node, 4 ms for nested timers in browsers)". It's at the back of a long line.</div>
+</section>
+
+<!-- GOTCHAS -->
+<section class="card" id="gotchas">
+  <h2><span class="icon">▸</span> Gotchas &amp; takeaways</h2>
+
+  <h3>Things to internalise</h3>
+  <ul>
+    <li><strong>Synchronous code always wins.</strong> Every <code class="inline">console.log</code> not behind a setTimeout/Promise fires before any deferred work.</li>
+    <li><strong>Microtasks always beat macrotasks</strong> — even if a microtask is queued after a macrotask. If both are pending at the same moment, the microtask runs first.</li>
+    <li><strong>Microtasks drain greedily.</strong> Any microtask queued during the drain joins the same drain. The macrotask queue waits.</li>
+    <li><strong>Macrotasks process one at a time.</strong> After each one, the runtime drains microtasks again before dequeuing the next macrotask.</li>
+  </ul>
+
+  <h3>Common misconceptions</h3>
+  <ul>
+    <li><span style="color:var(--love)">✗</span> "<code class="inline">setTimeout(fn, 0)</code> runs immediately." → It runs <em>at the back of the next macrotask queue</em>.</li>
+    <li><span style="color:var(--love)">✗</span> "Promise callbacks run asynchronously, just like setTimeout." → They're <em>both</em> async, but Promise callbacks always run before setTimeout callbacks when both are ready.</li>
+    <li><span style="color:var(--love)">✗</span> "Microtasks fire as soon as queued." → They fire <em>when the runtime drains the queue</em> — typically after the current task or function returns.</li>
+    <li><span style="color:var(--love)">✗</span> "<code class="inline">await</code> blocks the thread." → It returns control to the runtime; the continuation is queued as a microtask.</li>
+  </ul>
+
+  <h3>Node-specific notes</h3>
+  <ul>
+    <li>Node's event loop has multiple <strong>phases</strong>: timers, pending callbacks, idle/prepare, poll, check, close. Macrotasks are split across these phases.</li>
+    <li><code class="inline">process.nextTick</code> is its own queue, drained <strong>before</strong> the microtask queue. So <code class="inline">process.nextTick(...)</code> beats <code class="inline">Promise.resolve().then(...)</code>.</li>
+    <li><code class="inline">setImmediate(...)</code> runs in the <em>check</em> phase, which comes after poll. In practice, setImmediate usually fires before a <code class="inline">setTimeout(..., 0)</code> when both are queued outside an I/O callback — but not always.</li>
+    <li>This file's behaviour is <strong>identical in browsers and Node</strong>, because it uses only setTimeout and Promise — both have spec'd ordering.</li>
+  </ul>
+</section>
+
+<!-- FURTHER READING -->
+<section class="card" id="further">
+  <h2><span class="icon">▸</span> Further reading</h2>
+  <ul>
+    <li><strong>Continue the series:</strong> <a class="inline-docs" href="js-q-2-explainer.html">Part 2 — Promise executor &amp; chain interleave</a> · <a class="inline-docs" href="await-explainer.html">Part 3 — await migration</a></li>
+    <li><a class="inline-docs" href="https://html.spec.whatwg.org/multipage/webappapis.html#event-loops" target="_blank" rel="noopener">HTML Spec — Event loops</a> (canonical definition for browsers)</li>
+    <li><a class="inline-docs" href="https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick" target="_blank" rel="noopener">Node.js — The Node.js event loop, timers, and process.nextTick</a></li>
+    <li><a class="inline-docs" href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Event_loop" target="_blank" rel="noopener">MDN — The event loop</a></li>
+    <li><a class="inline-docs" href="https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/" target="_blank" rel="noopener">Jake Archibald — Tasks, microtasks, queues and schedules</a> (still the definitive deep-dive)</li>
+    <li><a class="inline-docs" href="https://www.youtube.com/watch?v=cCOL7MC4Pl0" target="_blank" rel="noopener">Jake Archibald — "In the loop" (JSConf.Asia 2018)</a> (45-min talk, same author)</li>
+  </ul>
+
+  <div class="note new"><strong>Try this yourself:</strong> Paste <code class="inline">src/js-q.js</code> into <a class="inline-docs" href="https://www.jsv9000.app/" target="_blank" rel="noopener">jsv9000.app</a> or <a class="inline-docs" href="https://www.jsiscoolerthan.you/" target="_blank" rel="noopener">latentflip's Loupe</a> for an animated visualisation of the call stack + queues. Step through and watch the queue states match the trace table above.</div>
+</section>
+
+</div>
+</main>
+
+<footer>
+  Event-loop explainer · Rose Pine theme · companion to <code class="inline">src/js-q.js</code><br>
+  Final answer: <strong style="color:var(--rose); letter-spacing:0.3em">A H D F G B C E</strong><br>
+  <strong style="color:var(--rose)">Part 1: timers</strong> · <a href="js-q-2-explainer.html">Part 2: executor &amp; chains</a> · <a href="await-explainer.html">Part 3: await migration</a>
+</footer>
+
+<script src="cheatsheets/app.js"></script>
+
+</body>
+</html>

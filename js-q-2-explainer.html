@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JS event-loop explainer #2 — Promise executors and chain interleave</title>
+<link rel="stylesheet" href="cheatsheets/styles.css">
+<style>
+  /* JS syntax token colors */
+  pre .kw   { color: var(--iris); font-weight: 600; }
+  pre .bi   { color: var(--foam); }
+  pre .fn   { color: var(--rose); }
+  pre .str  { color: var(--gold); }
+  pre .num  { color: var(--rose); }
+  pre .com  { color: var(--muted); font-style: italic; }
+  pre .op   { color: var(--subtle); }
+  pre .step { color: var(--gold); font-weight: 700; }
+  pre .out  { color: var(--pine); font-weight: 700; }
+
+  /* Big answer line */
+  .answer {
+    font-family: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 1.4rem;
+    letter-spacing: 0.25em;
+    color: var(--rose);
+    background: var(--overlay);
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    border-left: 4px solid var(--gold);
+    margin: 0.5rem 0 0.8rem;
+    text-align: center;
+    overflow-x: auto;
+  }
+  .answer .sep { color: var(--muted); margin: 0 0.1em; }
+
+  /* Phase pills */
+  .phase {
+    display: inline-block;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    background: var(--overlay);
+    border: 1px solid var(--highlight-med);
+    color: var(--foam);
+    font-family: "JetBrains Mono", monospace;
+    margin-right: 0.4rem;
+  }
+  .phase.sync  { border-color: var(--gold); color: var(--gold); }
+  .phase.micro { border-color: var(--iris); color: var(--iris); }
+
+  /* Wrong vs right comparison */
+  .compare {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.6rem;
+    margin: 0.5rem 0 0.7rem;
+  }
+  .compare > div {
+    background: var(--overlay);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.9rem;
+  }
+  .compare .wrong { border-left: 3px solid var(--love); }
+  .compare .right { border-left: 3px solid var(--pine); }
+  .compare h4 {
+    margin: 0 0 0.35rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .compare .wrong h4 { color: var(--love); }
+  .compare .right h4 { color: var(--pine); }
+  .compare code { color: var(--gold); }
+
+  /* Trace styling */
+  .trace-card { grid-column: 1 / -1; }
+  table.trace { font-size: 0.83rem; }
+  table.trace th { white-space: nowrap; }
+  table.trace td { font-family: "JetBrains Mono", monospace; font-size: 0.85em; vertical-align: top; }
+  table.trace td.action { font-family: inherit; }
+  table.trace tr.sync  td:first-child { border-left: 3px solid var(--gold); }
+  table.trace tr.micro td:first-child { border-left: 3px solid var(--iris); }
+  table.trace td .out { color: var(--pine); font-weight: 700; }
+  table.trace td .new { color: var(--rose); }
+  table.trace tr.sep td {
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+    background: var(--highlight-low);
+    font-family: inherit;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Event-loop <span class="accent">explainer #2</span></h1>
+  <p>Why does <code class="inline">src/js-q-2.js</code> print <strong style="color:var(--rose)">1 2 3 5 4 A1 B1 A2 B2 A3 B3</strong> — two more puzzles to break the most common wrong mental models. <a class="inline-docs" href="js-q-explainer.html">← Part 1</a> · <a class="inline-docs" href="await-explainer.html">Part 3 →</a></p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#code">The code</a>
+  <a href="#answer">Answer</a>
+  <a href="#p1-claim">Puzzle 1 — claim</a>
+  <a href="#p1-why">Puzzle 1 — why</a>
+  <a href="#p1-trace">Puzzle 1 — trace</a>
+  <a href="#p2-claim">Puzzle 2 — claim</a>
+  <a href="#p2-why">Puzzle 2 — why</a>
+  <a href="#p2-trace">Puzzle 2 — trace</a>
+  <a href="#combined">Combined trace</a>
+  <a href="#awaits">Connection to await</a>
+  <a href="#takeaways">Takeaways</a>
+  <a href="#further">Further reading</a>
+</nav>
+
+<main>
+<div class="grid">
+
+<!-- THE CODE -->
+<section class="card" id="code">
+  <h2><span class="icon">▸</span> The code</h2>
+  <p>Two short puzzles in one file. We'll trace each separately, then show the combined output.</p>
+
+<pre><span class="com">// Two more puzzles. What order will these print in?</span>
+
+<span class="com">// ── Puzzle 1: the Promise executor body</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'1'</span><span class="op">);</span>
+<span class="kw">new</span> <span class="bi">Promise</span><span class="op">((</span>resolve<span class="op">)</span> <span class="op">=&gt;</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'2'</span><span class="op">);</span>
+  <span class="fn">resolve</span><span class="op">();</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'3'</span><span class="op">);</span>
+<span class="op">}).</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'4'</span><span class="op">));</span>
+<span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'5'</span><span class="op">);</span>
+
+
+<span class="com">// ── Puzzle 2: two parallel .then chains</span>
+<span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">().</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A1'</span><span class="op">))</span>
+                 <span class="op">.</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A2'</span><span class="op">))</span>
+                 <span class="op">.</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A3'</span><span class="op">));</span>
+
+<span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">().</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B1'</span><span class="op">))</span>
+                 <span class="op">.</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B2'</span><span class="op">))</span>
+                 <span class="op">.</span><span class="fn">then</span><span class="op">(()</span> <span class="op">=&gt;</span> <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'B3'</span><span class="op">));</span></pre>
+</section>
+
+<!-- ANSWER -->
+<section class="card" id="answer">
+  <h2><span class="icon">▸</span> The answer</h2>
+  <p>Verified by running <code class="inline">node src/js-q-2.js</code>:</p>
+  <div class="answer">1<span class="sep">·</span>2<span class="sep">·</span>3<span class="sep">·</span>5<span class="sep">·</span>4<span class="sep">·</span>A1<span class="sep">·</span>B1<span class="sep">·</span>A2<span class="sep">·</span>B2<span class="sep">·</span>A3<span class="sep">·</span>B3</div>
+  <div class="note">
+    <strong>Two surprises baked into one output:</strong>
+    <ul style="margin:0.3rem 0 0">
+      <li>The <code class="inline">'3'</code> log inside the Promise executor body fires <em>before</em> <code class="inline">'5'</code> on the main thread — the executor is synchronous.</li>
+      <li>The A and B chains alternate (<code class="inline">A1 B1 A2 B2 A3 B3</code>) instead of completing one chain before starting the other.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- PUZZLE 1 CLAIM -->
+<section class="card" id="p1-claim">
+  <h2><span class="icon">▸</span> Puzzle 1 — the claim</h2>
+  <p>Most people who see this code for the first time predict:</p>
+  <div class="compare">
+    <div class="wrong">
+      <h4>Common guess (wrong)</h4>
+      <code>1 5 2 3 4</code>
+      <p style="margin:0.3rem 0 0; color:var(--subtle)">"The Promise is async, so its body runs later."</p>
+    </div>
+    <div class="right">
+      <h4>Actual output</h4>
+      <code>1 2 3 5 4</code>
+      <p style="margin:0.3rem 0 0; color:var(--subtle)">The executor runs <em>immediately</em>, on the call stack.</p>
+    </div>
+  </div>
+
+  <p>The mental model trap: people read <code class="inline">new Promise(...)</code> and assume the runtime "puts it off until later". It doesn't. Only the <code class="inline">.then</code> callback is deferred.</p>
+</section>
+
+<!-- PUZZLE 1 WHY -->
+<section class="card" id="p1-why">
+  <h2><span class="icon">▸</span> Puzzle 1 — why the executor is synchronous</h2>
+  <p>The <code class="inline">Promise</code> constructor takes a function (the <em>executor</em>) and calls it <strong>right then and there</strong>, on the current stack frame, before the constructor returns. This is necessary by design: the executor's job is to start the work that will eventually fulfil or reject the promise — DB queries, fetch requests, event listener wiring. If the executor were deferred, you'd lose synchronous access to things like the resolve function for tricky patterns, and the promise would always start in a half-constructed state.</p>
+
+  <p>What's deferred is <em>not the executor</em> but anything you attach via <code class="inline">.then</code>, <code class="inline">.catch</code>, <code class="inline">.finally</code>. Those go on the microtask queue.</p>
+
+  <h3>Reading the executor carefully</h3>
+<pre><span class="kw">new</span> <span class="bi">Promise</span><span class="op">((</span>resolve<span class="op">)</span> <span class="op">=&gt;</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'2'</span><span class="op">);</span>   <span class="com">// sync — logs 2 immediately</span>
+  <span class="fn">resolve</span><span class="op">();</span>          <span class="com">// flips state to fulfilled, but does NOT exit the function</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'3'</span><span class="op">);</span>   <span class="com">// sync — still logs, after resolve()</span>
+<span class="op">})</span></pre>
+
+  <div class="note new"><strong>Bonus surprise:</strong> calling <code class="inline">resolve()</code> doesn't stop execution. It marks the promise as fulfilled but the executor keeps running to its closing <code class="inline">}</code>. Code after <code class="inline">resolve()</code> still runs synchronously.</div>
+
+  <h3>And then the .then</h3>
+  <p>The <code class="inline">.then(() =&gt; console.log('4'))</code> is called on a <em>already-fulfilled</em> promise, so its callback is queued as a microtask right away. But like any microtask, it waits until the current stack is empty — meaning <code class="inline">'5'</code> logs first.</p>
+</section>
+
+<!-- PUZZLE 1 TRACE -->
+<section class="card" id="p1-trace">
+  <h2><span class="icon">▸</span> Puzzle 1 — trace</h2>
+  <table class="trace">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Phase</th>
+        <th class="action">Action</th>
+        <th>Microtask Q</th>
+        <th>Output</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="sync"><td>1</td><td><span class="phase sync">sync</span></td><td class="action">log <code>'1'</code></td><td>[]</td><td><span class="out">1</span></td></tr>
+      <tr class="sync"><td>2</td><td><span class="phase sync">sync</span></td><td class="action">enter executor → log <code>'2'</code></td><td>[]</td><td><span class="out">1 2</span></td></tr>
+      <tr class="sync"><td>3</td><td><span class="phase sync">sync</span></td><td class="action"><code>resolve()</code> — promise marked fulfilled</td><td>[]</td><td><span class="out">1 2</span></td></tr>
+      <tr class="sync"><td>4</td><td><span class="phase sync">sync</span></td><td class="action">log <code>'3'</code> (still in executor!)</td><td>[]</td><td><span class="out">1 2 3</span></td></tr>
+      <tr class="sync"><td>5</td><td><span class="phase sync">sync</span></td><td class="action"><code>.then(cb_4)</code> on fulfilled promise → queue <span class="new">M4</span></td><td>[M4]</td><td><span class="out">1 2 3</span></td></tr>
+      <tr class="sync"><td>6</td><td><span class="phase sync">sync</span></td><td class="action">log <code>'5'</code></td><td>[M4]</td><td><span class="out">1 2 3 5</span></td></tr>
+      <tr class="sep"><td colspan="5">— stack empty → drain microtasks —</td></tr>
+      <tr class="micro"><td>7</td><td><span class="phase micro">micro</span></td><td class="action">M4: log <code>'4'</code></td><td>[]</td><td><span class="out">1 2 3 5 4</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- PUZZLE 2 CLAIM -->
+<section class="card" id="p2-claim">
+  <h2><span class="icon">▸</span> Puzzle 2 — the claim</h2>
+  <div class="compare">
+    <div class="wrong">
+      <h4>Common guess (wrong)</h4>
+      <code>A1 A2 A3 B1 B2 B3</code>
+      <p style="margin:0.3rem 0 0; color:var(--subtle)">"The A chain is queued first, so it drains first."</p>
+    </div>
+    <div class="right">
+      <h4>Actual output</h4>
+      <code>A1 B1 A2 B2 A3 B3</code>
+      <p style="margin:0.3rem 0 0; color:var(--subtle)">The chains <em>interleave</em>, one step at a time.</p>
+    </div>
+  </div>
+
+  <p>This one breaks the intuition that a chain is "a thing" — a single deferred sequence. It isn't. A chain is just a series of independent microtask queueings, each triggered when the previous step settles.</p>
+</section>
+
+<!-- PUZZLE 2 WHY -->
+<section class="card" id="p2-why">
+  <h2><span class="icon">▸</span> Puzzle 2 — why chains interleave</h2>
+  <p>Look at what actually happens when you write <code class="inline">.then(...).then(...).then(...)</code>:</p>
+
+<pre>p0 <span class="op">=</span> <span class="bi">Promise</span><span class="op">.</span><span class="fn">resolve</span><span class="op">()</span>          <span class="com">// already fulfilled</span>
+p1 <span class="op">=</span> p0<span class="op">.</span><span class="fn">then</span><span class="op">(</span>cb_A1<span class="op">)</span>           <span class="com">// queues M_A1 NOW (p0 already settled)</span>
+                                <span class="com">// returns p1 (pending until M_A1 runs)</span>
+p2 <span class="op">=</span> p1<span class="op">.</span><span class="fn">then</span><span class="op">(</span>cb_A2<span class="op">)</span>           <span class="com">// p1 is pending → cb_A2 attached but NOT queued yet</span>
+p3 <span class="op">=</span> p2<span class="op">.</span><span class="fn">then</span><span class="op">(</span>cb_A3<span class="op">)</span>           <span class="com">// p2 is pending → cb_A3 attached but NOT queued yet</span></pre>
+
+  <p>So at the end of the sync phase, the microtask queue has just <strong>two</strong> entries — <code class="inline">M_A1</code> and <code class="inline">M_B1</code> — even though we wrote six <code class="inline">.then</code> calls. The other four are <em>attached as continuation handlers</em> on pending promises, waiting for their parent to settle.</p>
+
+  <p>When <code class="inline">M_A1</code> runs and returns, <code class="inline">p1</code> settles — and only <em>then</em> does <code class="inline">M_A2</code> get queued. But by that point, <code class="inline">M_B1</code> is also in the queue (it was queued from the start), so the runtime processes them in order. The queue at each tick looks like:</p>
+
+<pre>after sync       <span class="op">→</span>  [M_A1, M_B1]
+M_A1 runs        <span class="op">→</span>  [M_B1, <span class="step">M_A2</span>]   <span class="com">// A2 added at the back</span>
+M_B1 runs        <span class="op">→</span>  [M_A2, <span class="step">M_B2</span>]
+M_A2 runs        <span class="op">→</span>  [M_B2, <span class="step">M_A3</span>]
+M_B2 runs        <span class="op">→</span>  [M_A3, <span class="step">M_B3</span>]
+M_A3 runs        <span class="op">→</span>  [M_B3]
+M_B3 runs        <span class="op">→</span>  []</pre>
+
+  <div class="note danger"><strong>Real-world impact:</strong> If you fan out to many promise chains expecting them to run "in parallel and finish in order," they actually <em>round-robin</em>. For two chains of N steps, the cost is 2N microtask ticks — N for each — but interleaved. The total throughput is fine; the surprise is the ordering.</div>
+</section>
+
+<!-- PUZZLE 2 TRACE -->
+<section class="card" id="p2-trace">
+  <h2><span class="icon">▸</span> Puzzle 2 — trace</h2>
+  <table class="trace">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Phase</th>
+        <th class="action">Action</th>
+        <th>Microtask Q</th>
+        <th>Output</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="sync"><td>1</td><td><span class="phase sync">sync</span></td><td class="action">A chain set up — <span class="new">+M_A1</span>; A2, A3 attached as pending handlers</td><td>[M_A1]</td><td><span class="out">∅</span></td></tr>
+      <tr class="sync"><td>2</td><td><span class="phase sync">sync</span></td><td class="action">B chain set up — <span class="new">+M_B1</span>; B2, B3 attached as pending handlers</td><td>[M_A1, M_B1]</td><td><span class="out">∅</span></td></tr>
+      <tr class="sep"><td colspan="5">— stack empty → drain microtasks —</td></tr>
+      <tr class="micro"><td>3</td><td><span class="phase micro">micro</span></td><td class="action">M_A1: log <code>'A1'</code>; p1 fulfils → <span class="new">+M_A2</span></td><td>[M_B1, M_A2]</td><td><span class="out">A1</span></td></tr>
+      <tr class="micro"><td>4</td><td><span class="phase micro">micro</span></td><td class="action">M_B1: log <code>'B1'</code>; q1 fulfils → <span class="new">+M_B2</span></td><td>[M_A2, M_B2]</td><td><span class="out">A1 B1</span></td></tr>
+      <tr class="micro"><td>5</td><td><span class="phase micro">micro</span></td><td class="action">M_A2: log <code>'A2'</code>; p2 fulfils → <span class="new">+M_A3</span></td><td>[M_B2, M_A3]</td><td><span class="out">A1 B1 A2</span></td></tr>
+      <tr class="micro"><td>6</td><td><span class="phase micro">micro</span></td><td class="action">M_B2: log <code>'B2'</code>; q2 fulfils → <span class="new">+M_B3</span></td><td>[M_A3, M_B3]</td><td><span class="out">A1 B1 A2 B2</span></td></tr>
+      <tr class="micro"><td>7</td><td><span class="phase micro">micro</span></td><td class="action">M_A3: log <code>'A3'</code></td><td>[M_B3]</td><td><span class="out">A1 B1 A2 B2 A3</span></td></tr>
+      <tr class="micro"><td>8</td><td><span class="phase micro">micro</span></td><td class="action">M_B3: log <code>'B3'</code></td><td>[]</td><td><span class="out">A1 B1 A2 B2 A3 B3</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- COMBINED TRACE -->
+<section class="card trace-card" id="combined">
+  <h2><span class="icon">▸</span> Combined trace (both puzzles in one program)</h2>
+  <p>When both puzzles run back-to-back from the same file, their queue state mixes. M4 (the puzzle-1 microtask) was queued <em>before</em> the puzzle-2 chains started setting up — so it drains first.</p>
+
+  <table class="trace">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Phase</th>
+        <th class="action">Action</th>
+        <th>Microtask Q</th>
+        <th>Output</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="sync"><td>1</td><td><span class="phase sync">sync</span></td><td class="action">log <code>'1'</code></td><td>[]</td><td><span class="out">1</span></td></tr>
+      <tr class="sync"><td>2</td><td><span class="phase sync">sync</span></td><td class="action">executor → log <code>'2'</code>, <code>resolve()</code>, log <code>'3'</code></td><td>[]</td><td><span class="out">1 2 3</span></td></tr>
+      <tr class="sync"><td>3</td><td><span class="phase sync">sync</span></td><td class="action"><code>.then(cb_4)</code> → <span class="new">+M_4</span></td><td>[M_4]</td><td><span class="out">1 2 3</span></td></tr>
+      <tr class="sync"><td>4</td><td><span class="phase sync">sync</span></td><td class="action">log <code>'5'</code></td><td>[M_4]</td><td><span class="out">1 2 3 5</span></td></tr>
+      <tr class="sync"><td>5</td><td><span class="phase sync">sync</span></td><td class="action">A chain set up → <span class="new">+M_A1</span></td><td>[M_4, M_A1]</td><td><span class="out">1 2 3 5</span></td></tr>
+      <tr class="sync"><td>6</td><td><span class="phase sync">sync</span></td><td class="action">B chain set up → <span class="new">+M_B1</span></td><td>[M_4, M_A1, M_B1]</td><td><span class="out">1 2 3 5</span></td></tr>
+      <tr class="sep"><td colspan="5">— stack empty → drain microtasks —</td></tr>
+      <tr class="micro"><td>7</td><td><span class="phase micro">micro</span></td><td class="action">M_4: log <code>'4'</code></td><td>[M_A1, M_B1]</td><td><span class="out">1 2 3 5 4</span></td></tr>
+      <tr class="micro"><td>8</td><td><span class="phase micro">micro</span></td><td class="action">M_A1: log <code>'A1'</code> → <span class="new">+M_A2</span></td><td>[M_B1, M_A2]</td><td><span class="out">1 2 3 5 4 A1</span></td></tr>
+      <tr class="micro"><td>9</td><td><span class="phase micro">micro</span></td><td class="action">M_B1: log <code>'B1'</code> → <span class="new">+M_B2</span></td><td>[M_A2, M_B2]</td><td><span class="out">1 2 3 5 4 A1 B1</span></td></tr>
+      <tr class="micro"><td>10</td><td><span class="phase micro">micro</span></td><td class="action">M_A2: log <code>'A2'</code> → <span class="new">+M_A3</span></td><td>[M_B2, M_A3]</td><td><span class="out">1 2 3 5 4 A1 B1 A2</span></td></tr>
+      <tr class="micro"><td>11</td><td><span class="phase micro">micro</span></td><td class="action">M_B2: log <code>'B2'</code> → <span class="new">+M_B3</span></td><td>[M_A3, M_B3]</td><td><span class="out">1 2 3 5 4 A1 B1 A2 B2</span></td></tr>
+      <tr class="micro"><td>12</td><td><span class="phase micro">micro</span></td><td class="action">M_A3: log <code>'A3'</code></td><td>[M_B3]</td><td><span class="out">1 2 3 5 4 A1 B1 A2 B2 A3</span></td></tr>
+      <tr class="micro"><td>13</td><td><span class="phase micro">micro</span></td><td class="action">M_B3: log <code>'B3'</code></td><td>[]</td><td><span class="out">1 2 3 5 4 A1 B1 A2 B2 A3 B3</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- AWAITS -->
+<section class="card" id="awaits">
+  <h2><span class="icon">▸</span> Connection to async/await</h2>
+  <p>The chain-interleave puzzle is the same problem dressed up differently:</p>
+
+<pre><span class="kw">async function</span> <span class="fn">a</span><span class="op">()</span> <span class="op">{</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A1'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="num">0</span><span class="op">;</span>                  <span class="com">// microtask boundary #1</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A2'</span><span class="op">);</span>
+  <span class="kw">await</span> <span class="num">0</span><span class="op">;</span>                  <span class="com">// microtask boundary #2</span>
+  <span class="bi">console</span><span class="op">.</span><span class="fn">log</span><span class="op">(</span><span class="str">'A3'</span><span class="op">);</span>
+<span class="op">}</span>
+<span class="kw">async function</span> <span class="fn">b</span><span class="op">()</span> <span class="op">{</span> <span class="com">/* same with B1, B2, B3 */</span> <span class="op">}</span>
+<span class="fn">a</span><span class="op">();</span> <span class="fn">b</span><span class="op">();</span></pre>
+
+  <p>Output: <code class="inline">A1 B1 A2 B2 A3 B3</code> — same interleave. Every <code class="inline">await</code> is a microtask checkpoint, so two parallel async functions take turns at each <code class="inline">await</code> exactly like two <code class="inline">.then</code> chains do at each step.</p>
+
+  <div class="note new"><strong>Generalisation:</strong> <code class="inline">async function</code> is just a syntactic skin over <code class="inline">Promise</code> chaining. The number of awaits ≈ the number of microtask ticks needed for that function to complete.</div>
+
+  <h3>A subtle V8 optimisation</h3>
+  <p>Until V8 7.2 (Chrome 73 / Node 11), <code class="inline">await</code> on an already-resolved promise cost <strong>two</strong> microtask ticks because of how the spec was originally written. Modern V8 — including everything you'll run on Node 22+ — collapses it to one. So this puzzle is more counter-intuitive on old runtimes (more interleave steps) and cleaner on new ones.</p>
+</section>
+
+<!-- TAKEAWAYS -->
+<section class="card" id="takeaways">
+  <h2><span class="icon">▸</span> Mental model corrections</h2>
+
+  <h3>What's actually synchronous in async code</h3>
+  <ul>
+    <li><strong>The <code class="inline">Promise</code> executor body.</strong> Runs immediately on the current stack frame.</li>
+    <li><strong>Code after <code class="inline">resolve()</code> or <code class="inline">reject()</code>.</strong> Still in the executor → still sync.</li>
+    <li><strong>The <code class="inline">.then(cb)</code> call itself.</strong> Attaching the callback is sync — it's just a function call that registers <code>cb</code> on the promise. Only the <em>callback invocation</em> is deferred.</li>
+    <li><strong>An <code class="inline">async function</code> up to its first <code class="inline">await</code>.</strong> The function body runs sync until you hit an <code class="inline">await</code> — at which point the rest is rewritten as a <code class="inline">.then</code>.</li>
+  </ul>
+
+  <h3>What "a chain" actually is</h3>
+  <p>A <code class="inline">.then().then().then()</code> chain is not a single deferred unit. It's N independent registrations that flow forward as each step settles. Two chains running concurrently won't drain one then the other — they round-robin tick by tick.</p>
+
+  <h3>How to think about it</h3>
+  <ol>
+    <li><strong>One <code class="inline">.then</code> = one microtask tick.</strong> Count ticks, not chains.</li>
+    <li><strong>Resolve doesn't return.</strong> <code class="inline">resolve()</code> is more like "set a flag" than "return from this function".</li>
+    <li><strong>Microtask queue is FIFO across all queueing sources.</strong> Promise.then, queueMicrotask, MutationObserver — all share one queue, processed in registration order.</li>
+  </ol>
+</section>
+
+<!-- FURTHER READING -->
+<section class="card" id="further">
+  <h2><span class="icon">▸</span> Try this &amp; further reading</h2>
+  <ul>
+    <li><strong>Run it:</strong> <code class="inline">node src/js-q-2.js</code> from the project root.</li>
+    <li>Revisit <a class="inline-docs" href="js-q-explainer.html">Part 1 — A H D F G B C E</a> for the sync/micro/macro interplay with timers.</li>
+    <li>Continue to <a class="inline-docs" href="await-explainer.html">Part 3 — await migration</a> for how all of this maps onto async/await syntax and what to watch when migrating from <code class="inline">.then</code>.</li>
+    <li><a class="inline-docs" href="https://tc39.es/ecma262/#sec-promise-resolve-functions" target="_blank" rel="noopener">ECMA-262 — Promise Resolve Functions</a> (spec; technical)</li>
+    <li><a class="inline-docs" href="https://v8.dev/blog/fast-async" target="_blank" rel="noopener">V8 blog — Faster async functions and promises</a> (covers the <code class="inline">await</code> optimisation)</li>
+    <li><a class="inline-docs" href="https://jakearchibald.com/2017/await-vs-return-vs-return-await/" target="_blank" rel="noopener">Jake Archibald — await vs return vs return await</a> (three subtly different ways to wait)</li>
+    <li><a class="inline-docs" href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise" target="_blank" rel="noopener">MDN — Promise</a></li>
+  </ul>
+
+  <div class="note new"><strong>Exercise:</strong> Predict the output of <code class="inline">Promise.resolve().then(() =&gt; console.log('X')).then(() =&gt; console.log('Y'));<br>queueMicrotask(() =&gt; console.log('Z'));</code> — then verify. (Answer: <code class="inline">X Z Y</code>. <code class="inline">queueMicrotask</code> and <code class="inline">Promise.then</code> share one queue; the second <code class="inline">.then</code> is registered on a pending promise so its microtask is queued only after X runs.)</div>
+</section>
+
+</div>
+</main>
+
+<footer>
+  Event-loop explainer #2 · Rose Pine theme · companion to <code class="inline">src/js-q-2.js</code><br>
+  Final answer: <strong style="color:var(--rose); letter-spacing:0.2em">1 2 3 5 4 A1 B1 A2 B2 A3 B3</strong><br>
+  <a href="js-q-explainer.html">Part 1: timers</a> · <strong style="color:var(--rose)">Part 2: executor &amp; chains</strong> · <a href="await-explainer.html">Part 3: await migration</a>
+</footer>
+
+<script src="cheatsheets/app.js"></script>
+
+</body>
+</html>
