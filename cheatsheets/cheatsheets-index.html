@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cheatsheets — TypeScript 6.0 · curl · Rose Pine</title>
-<link rel="stylesheet" href="cheatsheets/styles.css">
+<link rel="stylesheet" href="styles.css">
 <style>
   .hero { grid-column: 1 / -1; }
   .hero h2 { color: var(--rose); font-size: 1.4rem; border-bottom: none; padding-bottom: 0; }
@@ -106,7 +106,7 @@
   <p>Surface-level reference material is everywhere. What's harder to find is reference material that <em>also</em> answers <em>why</em> — why is this option deprecated, what trap does this flag avoid. Each cheatsheet pairs a high-density quick-scan layout with inline notes, warnings, and links to canonical specs.</p>
 
   <h3>Mechanics</h3>
-  <p>Both pages are fully responsive (1 / 2 / 3 columns by viewport), with a sticky table-of-contents bar on desktop and a hamburger drawer on mobile. They share <code class="inline">cheatsheets/styles.css</code> + <code class="inline">cheatsheets/app.js</code> — no build step, no framework, no dependencies. Print works fine too.</p>
+  <p>Both pages are fully responsive (1 / 2 / 3 columns by viewport), with a sticky table-of-contents bar on desktop and a hamburger drawer on mobile. They share <code class="inline">styles.css</code> + <code class="inline">app.js</code> (sibling files in this folder) — no build step, no framework, no dependencies. Print works fine too.</p>
 </section>
 
 <!-- TS -->
@@ -147,15 +147,15 @@
   <h2><span class="icon">▸</span> How it's built</h2>
 
 <pre class="tree"><span class="dir">node-ts-test/</span>
-├── <span class="file">cheatsheets-index.html</span>      <span class="com">← you are here</span>
-├── <span class="file">typescript-cheatsheet.html</span>
-├── <span class="file">curl-cheatsheet.html</span>
 └── <span class="dir">cheatsheets/</span>
+    ├── <span class="file">cheatsheets-index.html</span>  <span class="com">← you are here</span>
+    ├── <span class="file">typescript-cheatsheet.html</span>
+    ├── <span class="file">curl-cheatsheet.html</span>
     ├── <span class="file">styles.css</span>              <span class="com">← shared Rose Pine, responsive grid, burger menu</span>
     └── <span class="file">app.js</span>                  <span class="com">← shared drawer toggle</span></pre>
 
   <ul>
-    <li>Each cheatsheet links <code class="inline">cheatsheets/styles.css</code> and <code class="inline">cheatsheets/app.js</code></li>
+    <li>Each cheatsheet links <code class="inline">styles.css</code> and <code class="inline">app.js</code> (same directory)</li>
     <li>Only file-specific syntax-token colours stay inline (TS uses gold / iris / foam; curl uses love / gold / foam — overlapping class names so they have to remain per-file)</li>
     <li>Responsive 1 / 2 / 3-col grid driven by <code class="inline">@media</code> at 760 px and 1200 px</li>
     <li><code class="inline">max-width: min(2400px, 96vw)</code> lets cards fill ultrawide monitors without absurd line lengths</li>
@@ -268,7 +268,7 @@
   <a href="event-loop-index.html">→ Event-loop series index</a>
 </footer>
 
-<script src="cheatsheets/app.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>

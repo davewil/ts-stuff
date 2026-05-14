@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JavaScript event-loop series — three-part deep dive</title>
-<link rel="stylesheet" href="cheatsheets/styles.css">
+<link rel="stylesheet" href="styles.css">
 <style>
   .hero { grid-column: 1 / -1; }
   .hero h2 { color: var(--rose); font-size: 1.4rem; border-bottom: none; padding-bottom: 0; }
@@ -154,7 +154,7 @@
   <p>Every part pairs a runnable JS source file (<code class="inline">src/js-q.js</code>, <code class="inline">src/js-q-2.js</code>) with an explainer that traces the output character by character. Every trace was verified by running the code with Node 24 and matching against the predicted output. No hand-waving, no "trust me."</p>
 
   <h3>Mechanics</h3>
-  <p>All three pages are fully responsive (1 / 2 / 3 columns by viewport), with a sticky table-of-contents bar on desktop and a hamburger drawer on mobile. They share <code class="inline">cheatsheets/styles.css</code> + <code class="inline">cheatsheets/app.js</code>. Each part has forward / backward navigation in its header and footer so you can flip between them.</p>
+  <p>All three pages are fully responsive (1 / 2 / 3 columns by viewport), with a sticky table-of-contents bar on desktop and a hamburger drawer on mobile. They share <code class="inline">styles.css</code> + <code class="inline">app.js</code> (sibling files in this folder). Each part has forward / backward navigation in its header and footer so you can flip between them.</p>
 </section>
 
 <!-- PROGRESSION -->
@@ -228,11 +228,11 @@
   <h2><span class="icon">▸</span> How it's built</h2>
 
 <pre class="tree"><span class="dir">node-ts-test/</span>
-├── <span class="file">event-loop-index.html</span>       <span class="com">← you are here</span>
-├── <span class="file">js-q-explainer.html</span>         <span class="com">← Part 1</span>
-├── <span class="file">js-q-2-explainer.html</span>       <span class="com">← Part 2</span>
-├── <span class="file">await-explainer.html</span>        <span class="com">← Part 3</span>
 ├── <span class="dir">cheatsheets/</span>
+│   ├── <span class="file">event-loop-index.html</span>   <span class="com">← you are here</span>
+│   ├── <span class="file">js-q-explainer.html</span>     <span class="com">← Part 1</span>
+│   ├── <span class="file">js-q-2-explainer.html</span>   <span class="com">← Part 2</span>
+│   ├── <span class="file">await-explainer.html</span>    <span class="com">← Part 3</span>
 │   ├── <span class="file">styles.css</span>              <span class="com">← shared Rose Pine, responsive grid, burger menu</span>
 │   └── <span class="file">app.js</span>                  <span class="com">← shared drawer toggle</span>
 └── <span class="dir">src/</span>
@@ -240,7 +240,7 @@
     └── <span class="file">js-q-2.js</span>               <span class="com">← Part 2 puzzle source — run with `node src/js-q-2.js`</span></pre>
 
   <ul>
-    <li>Each explainer is a single HTML file linking <code class="inline">cheatsheets/styles.css</code> and <code class="inline">cheatsheets/app.js</code></li>
+    <li>Each explainer is a single HTML file linking <code class="inline">styles.css</code> and <code class="inline">app.js</code> (same directory)</li>
     <li>Only JS-specific syntax-token colours and per-page styles (trace tables, queue-state cards, phase pills) stay inline</li>
     <li>Every trace was verified by running the corresponding <code class="inline">.js</code> file with Node 24 and diffing the actual output against the predicted output character-for-character</li>
     <li>No framework, no bundler, no dependencies — three pages totalling ~155 KB</li>
@@ -376,7 +376,7 @@
   <a href="cheatsheets-index.html">→ Cheatsheets index</a>
 </footer>
 
-<script src="cheatsheets/app.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>
