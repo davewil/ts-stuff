@@ -200,21 +200,21 @@
 
 <pre class="diagram">  ┌────────────────────────────────────────┐
   │  <span class="stack">CALL STACK</span>                            │  ← sync code (LIFO)
-  │  console.log, setTimeout(…), …          │
+  │  console.log, setTimeout(…), …         │
   └────────────────┬───────────────────────┘
                    │  stack empty?
                    ▼
   ┌────────────────────────────────────────┐
   │  <span class="micro">MICROTASK QUEUE</span>  (drain ALL, FIFO)    │
-  │  Promise .then/.catch/.finally          │
-  │  queueMicrotask, MutationObserver       │
+  │  Promise .then/.catch/.finally         │
+  │  queueMicrotask, MutationObserver      │
   └────────────────┬───────────────────────┘
                    │  empty?
                    ▼
   ┌────────────────────────────────────────┐
   │  <span class="macro">MACROTASK QUEUE</span>  (take ONE, FIFO)     │
-  │  setTimeout, setInterval, I/O,          │
-  │  setImmediate, message events, …        │
+  │  setTimeout, setInterval, I/O,         │
+  │  setImmediate, message events, …       │
   └────────────────┬───────────────────────┘
                    │
                    <span class="arrow">└─→  back to MICROTASK drain</span></pre>
