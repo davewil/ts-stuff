@@ -60,6 +60,16 @@ const THEME_OPTIONS = [
 // Stays in lock-step with window.WALLPAPER_KINDS but doesn't import it (this
 // file is loaded by Babel-standalone and runs before the global is in scope
 // at module-eval time; we redeclare so the chrome select renders deterministically).
+// OS-aware modifier label. The Cmd-K listener accepts metaKey || ctrlKey on
+// any platform; this just changes what we DISPLAY so Mac users see ⌘, Windows
+// sees Win, Linux sees Super.
+function osShortcut(key) {
+  const p = (typeof navigator !== 'undefined' && navigator.platform) || '';
+  if (/Mac|iPhone|iPad|iPod/.test(p)) return '⌘' + key;
+  if (/Win/.test(p)) return 'Win+' + key;
+  return 'Super+' + key;
+}
+
 const WALLPAPER_OPTIONS = [
   { id: "off",       label: "Off" },
   { id: "aurora",    label: "Aurora" },
@@ -246,7 +256,7 @@ function App() {
           onClick={() => window.postMessage({ type: "__activate_edit_mode" }, "*")}
         >⚙</button>
         <div className="kbd-hint">
-          <span className="kbd">⌘K</span> search
+          <span className="kbd">{osShortcut("K")}</span> search
         </div>
       </div>
 
@@ -263,7 +273,7 @@ function App() {
           <p className="lede">
             A living library — <strong>cheatsheets, references, and works-in-progress</strong> across the
             languages, runtimes, and infra I keep coming back to. Each card is either ready to use, being
-            written, or actively researched. Switch views, filter by status, or hit <strong>⌘K</strong>.
+            written, or actively researched. Switch views, filter by status, or hit <strong>{osShortcut("K")}</strong>.
           </p>
           <div className="meta-row">
             <span className="stat"><span className="n">{window.TOPICS.length}</span><span className="l">topics</span></span>
@@ -298,7 +308,7 @@ function App() {
           <div className="grow"></div>
           <button className="search" onClick={() => setCmdkOpen(true)}>
             <span>⌕</span> search topics
-            <span className="k">⌘K</span>
+            <span className="k">{osShortcut("K")}</span>
           </button>
         </div>
       )}

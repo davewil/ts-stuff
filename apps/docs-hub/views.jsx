@@ -3,6 +3,15 @@
 
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
+// OS-aware modifier label. Duplicated from app.jsx to avoid load-order
+// coupling — the function is small and runs only at render time.
+function osShortcutLabel(key) {
+  const p = (typeof navigator !== 'undefined' && navigator.platform) || '';
+  if (/Mac|iPhone|iPad|iPod/.test(p)) return { mod: '⌘', sep: '', key };
+  if (/Win/.test(p)) return { mod: 'Win', sep: '+', key };
+  return { mod: 'Super', sep: '+', key };
+}
+
 // ───────────────────── shared helpers ────────────────────────
 function statusLabel(id) {
   return (window.STATUSES.find((s) => s.id === id) || {}).label || id;
@@ -349,7 +358,10 @@ function IdeView({ groups, allTopics, selectedId, onSelect, openTabs, onCloseTab
               <div className="hint">
                 Select a file from the sidebar
                 <br />
-                or press <span className="kbd">⌘</span><span className="kbd">K</span> to search
+                or press {(() => {
+                  const s = osShortcutLabel('K');
+                  return <><span className="kbd">{s.mod}</span>{s.sep && <span style={{ margin: '0 0.2rem', color: 'var(--muted)' }}>{s.sep}</span>}<span className="kbd">{s.key}</span></>;
+                })()} to search
               </div>
             </div>
           </div>
