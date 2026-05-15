@@ -14,7 +14,9 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accent": "rose",
   "motion": "on",
   "showHero": true,
-  "showStatusbar": true
+  "showStatusbar": true,
+  "wallpaper": "aurora",
+  "wallpaperIntensity": 0.85
 }/*EDITMODE-END*/;
 
 const STORAGE_KEY = "docs-hub:tweaks";
@@ -52,6 +54,19 @@ const THEME_OPTIONS = [
   { id: "main", label: "Main" },
   { id: "moon", label: "Moon" },
   { id: "dawn", label: "Dawn" }
+];
+
+// Wallpaper picker — "off" plus the five shaders exposed by wallpapers.jsx.
+// Stays in lock-step with window.WALLPAPER_KINDS but doesn't import it (this
+// file is loaded by Babel-standalone and runs before the global is in scope
+// at module-eval time; we redeclare so the chrome select renders deterministically).
+const WALLPAPER_OPTIONS = [
+  { id: "off",       label: "Off" },
+  { id: "aurora",    label: "Aurora" },
+  { id: "plasma",    label: "Plasma" },
+  { id: "voronoi",   label: "Voronoi" },
+  { id: "metaballs", label: "Metaballs" },
+  { id: "caustics",  label: "Caustics" }
 ];
 
 function App() {
@@ -159,10 +174,18 @@ function App() {
   }, [t.view, t.motion, openTopic]);
 
   const viewName = { atlas: "Atlas", terminal: "Terminal", zine: "Zine", ide: "IDE" }[t.view];
+  const hasWallpaper = t.wallpaper && t.wallpaper !== "off";
 
   return (
     <>
-      <div className="bg-grid" aria-hidden="true"></div>
+      {hasWallpaper && (
+        <Wallpaper
+          kind={t.wallpaper}
+          intensity={t.wallpaperIntensity}
+          themeKey={t.theme + ":" + t.accent}
+        />
+      )}
+      <div className="bg-grid" data-dim={hasWallpaper ? "true" : "false"} aria-hidden="true"></div>
 
       <div className="chrome">
         <div className="dots">
@@ -202,6 +225,26 @@ function App() {
             </button>
           ))}
         </div>
+        <label className="wallpaper-pick" title="Background wallpaper">
+          <span className="wp-label">FX</span>
+          <select
+            className="wp-select"
+            value={t.wallpaper}
+            onChange={(e) => setTweak("wallpaper", e.target.value)}
+            aria-label="Wallpaper"
+          >
+            {WALLPAPER_OPTIONS.map((w) => (
+              <option key={w.id} value={w.id}>{w.label}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="tweaks-btn"
+          aria-label="Open tweaks"
+          title="Advanced tweaks (motion, density, accent, intensity)"
+          onClick={() => window.postMessage({ type: "__activate_edit_mode" }, "*")}
+        >⚙</button>
         <div className="kbd-hint">
           <span className="kbd">⌘K</span> search
         </div>
@@ -348,6 +391,21 @@ function App() {
         <TweakToggle label="Motion" value={t.motion === "on"} onChange={(v) => setTweak("motion", v ? "on" : "off")} />
         <TweakToggle label="Show hero" value={t.showHero} onChange={(v) => setTweak("showHero", v)} />
         <TweakToggle label="Show statusbar" value={t.showStatusbar} onChange={(v) => setTweak("showStatusbar", v)} />
+        <TweakSection label="Wallpaper" />
+        <TweakSelect
+          label="Shader"
+          value={t.wallpaper}
+          options={WALLPAPER_OPTIONS.map((w) => ({ value: w.id, label: w.label }))}
+          onChange={(v) => setTweak("wallpaper", v)}
+        />
+        <TweakSlider
+          label="Intensity"
+          value={Math.round(t.wallpaperIntensity * 100) / 100}
+          min={0}
+          max={1.2}
+          step={0.05}
+          onChange={(v) => setTweak("wallpaperIntensity", v)}
+        />
       </TweaksPanel>
     </>
   );

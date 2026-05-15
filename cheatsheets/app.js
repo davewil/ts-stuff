@@ -76,6 +76,7 @@
     if (!VALID.has(theme)) return;
     document.documentElement.dataset.theme = theme;
     syncButtons(theme);
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
   }
 
   // Initial sync — the head bootstrap already applied data-theme; reflect
@@ -97,4 +98,16 @@
     const next = readPersisted().theme;
     if (VALID.has(next) && next !== currentTheme()) applyTheme(next);
   });
+})();
+
+/* Wallpaper auto-mount. The engine reads kind+intensity from docs-hub:tweaks
+   localStorage and listens for storage events so changing the wallpaper on
+   another page (or the hub) takes effect here without reload. */
+(function () {
+  if (typeof window.mountWallpaper !== 'function') return;
+  const controller = window.mountWallpaper();
+  // Expose so the cheatsheet tweaks panel can drive it imperatively.
+  window.__wallpaperController = controller;
+  // When the theme switcher updates --rose / --base, refresh shader colours.
+  window.addEventListener('themechange', () => controller.refresh());
 })();

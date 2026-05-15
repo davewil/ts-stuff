@@ -57,6 +57,23 @@
 
 * { box-sizing: border-box; }
 
+/* WebGL wallpaper canvas — fixed behind everything; pointer-events: none so
+   the page UI receives clicks normally (engine attaches its own listeners on
+   window). */
+.wallpaper-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
+body:has(.wallpaper-canvas) { background: var(--base); }
+/* Lift content above the canvas with a baseline z-index. */
+header, main, footer, .back-link, nav.toc,
+.tweaks-fab, .tweaks-panel { position: relative; z-index: 1; }
+
 /* Top bar — back-link on the left, theme switcher on the right. Points to
    "/" so it works both in the current static site and inside the React hub
    image (where the hub itself lives at /). */
@@ -90,6 +107,197 @@
   color: var(--rose);
   border-color: var(--rose);
   background: var(--highlight-low);
+}
+
+/* ───────────────── Tweaks FAB + panel ───────────────── */
+.tweaks-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--overlay);
+  border: 1px solid var(--highlight-med);
+  color: var(--subtle);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, transform 0.15s, background 0.15s;
+}
+.tweaks-fab:hover { color: var(--rose); border-color: var(--rose); transform: rotate(45deg); }
+.tweaks-fab.on    { color: var(--base); background: var(--rose); border-color: var(--rose); }
+[data-theme="dawn"] .tweaks-fab.on { color: var(--surface); }
+
+.tweaks-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 64px;
+  z-index: 60;
+  width: 260px;
+  max-height: calc(100vh - 96px);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--highlight-med);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+}
+.tweaks-panel.open { opacity: 1; transform: none; }
+
+.tweaks-panel .tp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--highlight-low);
+}
+.tweaks-panel .tp-title { font-weight: 600; color: var(--text); letter-spacing: 0.02em; }
+.tweaks-panel .tp-close {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.tweaks-panel .tp-close:hover { color: var(--rose); background: var(--highlight-low); }
+
+.tweaks-panel .tp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.7rem 0.85rem 0.9rem;
+  overflow-y: auto;
+}
+.tweaks-panel .tp-section {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 0.3rem;
+}
+.tweaks-panel .tp-section:first-child { margin-top: 0; }
+
+.tweaks-panel .tp-row { display: flex; gap: 0.4rem; flex-direction: row; }
+.tweaks-panel .tp-row-col { flex-direction: column; gap: 0.35rem; }
+.tweaks-panel .tp-row-h { align-items: center; justify-content: space-between; }
+
+.tweaks-panel .tp-label-row { display: flex; align-items: baseline; justify-content: space-between; }
+.tweaks-panel .tp-label { color: var(--subtle); }
+.tweaks-panel .tp-val   { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.tweaks-panel .tp-chips {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--overlay);
+  border: 1px solid var(--highlight-med);
+  gap: 0;
+  flex: 1;
+}
+.tweaks-panel .tp-chip {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--subtle);
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+  flex: 1;
+}
+.tweaks-panel .tp-chip:hover { color: var(--text); }
+.tweaks-panel .tp-chip.on    { background: var(--rose); color: var(--base); }
+[data-theme="dawn"] .tweaks-panel .tp-chip.on { color: var(--surface); }
+
+.tweaks-panel .tp-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--overlay);
+  color: var(--text);
+  border: 1px solid var(--highlight-med);
+  border-radius: 6px;
+  padding: 0.3rem 1.2rem 0.3rem 0.55rem;
+  font: inherit;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23908caa' d='M0 0h10L5 6z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.45rem center;
+  outline: none;
+}
+.tweaks-panel .tp-select:focus { border-color: var(--rose); }
+
+.tweaks-panel .tp-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 3px;
+  background: var(--highlight-med);
+  border-radius: 999px;
+  outline: none;
+}
+.tweaks-panel .tp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--rose);
+  cursor: pointer;
+  border: 0;
+}
+.tweaks-panel .tp-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--rose);
+  cursor: pointer;
+  border: 0;
+}
+
+.tweaks-panel .tp-toggle {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--highlight-med);
+  cursor: pointer;
+  padding: 0;
+}
+.tweaks-panel .tp-toggle[data-on="1"] { background: var(--pine); }
+.tweaks-panel .tp-toggle i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.15s;
+}
+.tweaks-panel .tp-toggle[data-on="1"] i { transform: translateX(12px); }
+
+/* Honour the motion-off body attribute set by the panel */
+body[data-motion="off"] *,
+body[data-motion="off"] *::before,
+body[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
 }
 
 /* Theme switcher (shared with the React hub via docs-hub:tweaks localStorage) */

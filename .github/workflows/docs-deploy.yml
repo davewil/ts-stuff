@@ -81,6 +81,8 @@ jobs:
             "cheatsheets/await-explainer.html"
             "cheatsheets/styles.css"
             "cheatsheets/app.js"
+            "cheatsheets/wallpaper-engine.js"
+            "cheatsheets/tweaks.js"
           )
           for f in "${required[@]}"; do
             test -f "$f" || { echo "MISSING: $f"; exit 1; }
@@ -131,6 +133,7 @@ jobs:
             "apps/docs-hub/app.jsx"
             "apps/docs-hub/views.jsx"
             "apps/docs-hub/tweaks-panel.jsx"
+            "apps/docs-hub/wallpapers.jsx"
             "Dockerfile.docs-hub"
           )
           for f in "${required[@]}"; do
@@ -165,7 +168,7 @@ jobs:
           done
           fail=0
           # Root files
-          for f in index.html site.css data.js app.jsx views.jsx tweaks-panel.jsx; do
+          for f in index.html site.css data.js app.jsx views.jsx tweaks-panel.jsx wallpapers.jsx; do
             code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:18081/$f")
             if [ "$code" = "200" ]; then
               echo "200  /$f"
@@ -182,7 +185,9 @@ jobs:
                    cheatsheets/js-q-2-explainer.html \
                    cheatsheets/await-explainer.html \
                    cheatsheets/styles.css \
-                   cheatsheets/app.js; do
+                   cheatsheets/app.js \
+                   cheatsheets/wallpaper-engine.js \
+                   cheatsheets/tweaks.js; do
             code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:18081/$f")
             if [ "$code" = "200" ]; then
               echo "200  /$f"
@@ -440,7 +445,7 @@ jobs:
 
             echo "=== Smoke test (hub root) ==="
             fail=0
-            for f in index.html site.css data.js app.jsx views.jsx tweaks-panel.jsx; do
+            for f in index.html site.css data.js app.jsx views.jsx tweaks-panel.jsx wallpapers.jsx; do
               code=$(docker compose -f docker-compose.prod.yml exec -T docs-hub wget -S -qO /dev/null "http://localhost/$f" 2>&1 | awk '/HTTP\//{print $2; exit}')
               if [ "$code" = "200" ]; then
                 echo "200  /$f"
@@ -458,7 +463,9 @@ jobs:
                      cheatsheets/js-q-2-explainer.html \
                      cheatsheets/await-explainer.html \
                      cheatsheets/styles.css \
-                     cheatsheets/app.js; do
+                     cheatsheets/app.js \
+                     cheatsheets/wallpaper-engine.js \
+                     cheatsheets/tweaks.js; do
               code=$(docker compose -f docker-compose.prod.yml exec -T docs-hub wget -S -qO /dev/null "http://localhost/$f" 2>&1 | awk '/HTTP\//{print $2; exit}')
               if [ "$code" = "200" ]; then
                 echo "200  /$f"
