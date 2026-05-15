@@ -423,10 +423,13 @@ jobs:
             echo "Pulling latest hub image..."
             docker compose -f docker-compose.prod.yml pull docs-hub
 
-            echo "Recreating docs-hub container..."
-            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-build docs-hub
+            # Force-recreate everything so any label changes on the docs
+            # service (e.g. promotion → docs-legacy.davewil.dev) are picked up
+            # by caddy-docker-proxy, not just the new hub image.
+            echo "Recreating all services..."
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-build
 
-            echo "Waiting for health..."
+            echo "Waiting for hub health..."
             for i in $(seq 1 20); do
               if docker compose -f docker-compose.prod.yml exec -T docs-hub wget -qO- http://localhost/health 2>/dev/null | grep -q ok; then
                 echo "docs-hub healthy after ${i}s"
@@ -459,6 +462,27 @@ jobs:
               code=$(docker compose -f docker-compose.prod.yml exec -T docs-hub wget -S -qO /dev/null "http://localhost/$f" 2>&1 | awk '/HTTP\//{print $2; exit}')
               if [ "$code" = "200" ]; then
                 echo "200  /$f"
+              else
+                echo "FAIL $code /$f"
+                fail=1
+              fi
+            done
+
+            # Backwards-compat: pre-promotion deep links pointed at root
+            # (e.g. docs.davewil.dev/event-loop-index.html). nginx rewrites
+            # these into /cheatsheets/X.html — verify they still 200 so any
+            # already-shared link keeps working.
+            echo "=== Smoke test (legacy root paths) ==="
+            for f in event-loop-index.html \
+                     cheatsheets-index.html \
+                     typescript-cheatsheet.html \
+                     curl-cheatsheet.html \
+                     js-q-explainer.html \
+                     js-q-2-explainer.html \
+                     await-explainer.html; do
+              code=$(docker compose -f docker-compose.prod.yml exec -T docs-hub wget -S -qO /dev/null "http://localhost/$f" 2>&1 | awk '/HTTP\//{print $2; exit}')
+              if [ "$code" = "200" ]; then
+                echo "200  /$f  (rewritten → /cheatsheets/$f)"
               else
                 echo "FAIL $code /$f"
                 fail=1

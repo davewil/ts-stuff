@@ -1,5 +1,7 @@
 services:
-  # Production static site — docs.davewil.dev
+  # Old static site — kept on docs-legacy.davewil.dev for ~30 days as the
+  # rollback target. To rollback: move the caddy label below back to
+  # docs.davewil.dev and shift docs-hub off it.
   docs:
     image: ghcr.io/davewil/ts-stuff-docs:latest
     container_name: docs
@@ -13,17 +15,17 @@ services:
       timeout: 3s
       retries: 3
     labels:
-      caddy: docs.davewil.dev
+      caddy: docs-legacy.davewil.dev
       caddy.tls.dns: cloudflare {env.CF_API_TOKEN}
       caddy.reverse_proxy: "{{upstreams 80}}"
     networks:
       - default
       - proxy
 
-  # Preview/staging — docs-next.davewil.dev — React hub under iteration.
-  # Promotion = swap the caddy label below from docs-next.davewil.dev to
-  # docs.davewil.dev, and change the docs service above to docs-legacy.davewil.dev
-  # (or remove it). Rollback = revert that swap.
+  # Promoted: React hub serves docs.davewil.dev (primary). docs-next.davewil.dev
+  # is kept as a mirror for ~2 weeks so visual diffs against the new prod URL
+  # stay easy. Both hostnames point at the same upstream container — caddy
+  # registers two virtual hosts, both routed to port 80.
   docs-hub:
     image: ghcr.io/davewil/ts-stuff-docs-hub:latest
     container_name: docs-hub
@@ -37,9 +39,12 @@ services:
       timeout: 3s
       retries: 3
     labels:
-      caddy: docs-next.davewil.dev
-      caddy.tls.dns: cloudflare {env.CF_API_TOKEN}
-      caddy.reverse_proxy: "{{upstreams 80}}"
+      caddy_0: docs.davewil.dev
+      caddy_0.tls.dns: cloudflare {env.CF_API_TOKEN}
+      caddy_0.reverse_proxy: "{{upstreams 80}}"
+      caddy_1: docs-next.davewil.dev
+      caddy_1.tls.dns: cloudflare {env.CF_API_TOKEN}
+      caddy_1.reverse_proxy: "{{upstreams 80}}"
     networks:
       - default
       - proxy
