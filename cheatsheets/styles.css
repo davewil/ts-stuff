@@ -1,6 +1,7 @@
 /* Rose Pine cheatsheet — shared base styles */
 
 :root {
+  /* Rose Pine — Main (default) */
   --base: #191724;
   --surface: #1f1d2e;
   --overlay: #26233a;
@@ -18,7 +19,107 @@
   --highlight-high: #524f67;
 }
 
+[data-theme="moon"] {
+  --base: #232136;
+  --surface: #2a273f;
+  --overlay: #393552;
+  --muted: #6e6a86;
+  --subtle: #908caa;
+  --text: #e0def4;
+  --love: #eb6f92;
+  --gold: #f6c177;
+  --rose: #ea9a97;
+  --pine: #3e8fb0;
+  --foam: #9ccfd8;
+  --iris: #c4a7e7;
+  --highlight-low: #2a283e;
+  --highlight-med: #44415a;
+  --highlight-high: #56526e;
+}
+
+[data-theme="dawn"] {
+  --base: #faf4ed;
+  --surface: #fffaf3;
+  --overlay: #f2e9e1;
+  --muted: #9893a5;
+  --subtle: #797593;
+  --text: #575279;
+  --love: #b4637a;
+  --gold: #ea9d34;
+  --rose: #d7827e;
+  --pine: #286983;
+  --foam: #56949f;
+  --iris: #907aa9;
+  --highlight-low: #f4ede8;
+  --highlight-med: #dfdad9;
+  --highlight-high: #cecacd;
+}
+
 * { box-sizing: border-box; }
+
+/* Top bar — back-link on the left, theme switcher on the right. Points to
+   "/" so it works both in the current static site and inside the React hub
+   image (where the hub itself lives at /). */
+.back-link {
+  padding: 1rem clamp(0.75rem, 2vw, 1.5rem) 0;
+  max-width: min(2400px, 96vw);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.back-link a,
+.back-link a:visited {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  color: var(--foam);
+  background: var(--overlay);
+  border: 1px solid var(--highlight-med);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.back-link a:hover {
+  color: var(--rose);
+  border-color: var(--rose);
+  background: var(--highlight-low);
+}
+
+/* Theme switcher (shared with the React hub via docs-hub:tweaks localStorage) */
+.theme-switch {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--overlay);
+  border: 1px solid var(--highlight-med);
+  border-radius: 999px;
+  gap: 0;
+}
+.theme-switch button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--subtle);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.theme-switch button:hover { color: var(--text); }
+.theme-switch button.on {
+  background: var(--rose);
+  color: var(--base);
+}
+[data-theme="dawn"] .theme-switch button.on { color: var(--surface); }
 
 html, body {
   margin: 0;

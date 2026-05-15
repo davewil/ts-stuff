@@ -1,4 +1,5 @@
 services:
+  # Production static site — docs.davewil.dev
   docs:
     image: ghcr.io/davewil/ts-stuff-docs:latest
     container_name: docs
@@ -13,6 +14,30 @@ services:
       retries: 3
     labels:
       caddy: docs.davewil.dev
+      caddy.tls.dns: cloudflare {env.CF_API_TOKEN}
+      caddy.reverse_proxy: "{{upstreams 80}}"
+    networks:
+      - default
+      - proxy
+
+  # Preview/staging — docs-next.davewil.dev — React hub under iteration.
+  # Promotion = swap the caddy label below from docs-next.davewil.dev to
+  # docs.davewil.dev, and change the docs service above to docs-legacy.davewil.dev
+  # (or remove it). Rollback = revert that swap.
+  docs-hub:
+    image: ghcr.io/davewil/ts-stuff-docs-hub:latest
+    container_name: docs-hub
+    restart: unless-stopped
+    mem_limit: 64m
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    labels:
+      caddy: docs-next.davewil.dev
       caddy.tls.dns: cloudflare {env.CF_API_TOKEN}
       caddy.reverse_proxy: "{{upstreams 80}}"
     networks:

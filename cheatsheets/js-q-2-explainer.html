@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JS event-loop explainer #2 — Promise executors and chain interleave</title>
-<link rel="stylesheet" href="styles.css">
+<script>(function(){try{var t=(JSON.parse(localStorage.getItem("docs-hub:tweaks")||"{}")||{}).theme;if(t==="moon"||t==="dawn"||t==="main"){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
+<link rel="stylesheet" href="styles.css?v=2">
 <style>
   /* JS syntax token colors */
   pre .kw   { color: var(--iris); font-weight: 600; }
@@ -95,6 +96,15 @@
 </style>
 </head>
 <body>
+
+<nav class="back-link">
+  <a href="/">← All notes</a>
+  <div class="theme-switch" role="radiogroup" aria-label="Theme">
+    <button type="button" data-theme="main">Main</button>
+    <button type="button" data-theme="moon">Moon</button>
+    <button type="button" data-theme="dawn">Dawn</button>
+  </div>
+</nav>
 
 <header>
   <h1>Event-loop <span class="accent">explainer #2</span></h1>
@@ -406,7 +416,7 @@ M_B3 runs        <span class="op">→</span>  []</pre>
   <a href="js-q-explainer.html">Part 1: timers</a> · <strong style="color:var(--rose)">Part 2: executor &amp; chains</strong> · <a href="await-explainer.html">Part 3: await migration</a>
 </footer>
 
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 
 </body>
 </html>

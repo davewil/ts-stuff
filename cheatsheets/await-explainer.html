@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>await — how it fits the event loop, and migration traps</title>
-<link rel="stylesheet" href="styles.css">
+<script>(function(){try{var t=(JSON.parse(localStorage.getItem("docs-hub:tweaks")||"{}")||{}).theme;if(t==="moon"||t==="dawn"||t==="main"){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
+<link rel="stylesheet" href="styles.css?v=2">
 <style>
   /* JS syntax token colors */
   pre .kw   { color: var(--iris); font-weight: 600; }
@@ -107,6 +108,15 @@
 </style>
 </head>
 <body>
+
+<nav class="back-link">
+  <a href="/">← All notes</a>
+  <div class="theme-switch" role="radiogroup" aria-label="Theme">
+    <button type="button" data-theme="main">Main</button>
+    <button type="button" data-theme="moon">Moon</button>
+    <button type="button" data-theme="dawn">Dawn</button>
+  </div>
+</nav>
 
 <header>
   <h1><span class="accent">await</span> — how it fits</h1>
@@ -614,7 +624,7 @@ time:     ───────────────────────�
   <a href="js-q-explainer.html">Part 1: timers</a> · <a href="js-q-2-explainer.html">Part 2: executor &amp; chains</a> · <strong style="color:var(--rose)">Part 3: await migration</strong>
 </footer>
 
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 
 </body>
 </html>

@@ -1,0 +1,16 @@
+FROM nginx:alpine
+
+RUN rm -f /etc/nginx/conf.d/default.conf
+
+COPY docs/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Hub source files (index.html + React UMD wiring + data + views + css)
+COPY apps/docs-hub/ /usr/share/nginx/html/
+
+# Existing cheatsheet content under /cheatsheets/ so data.js's relative
+# `cheatsheets/X.html` links resolve. Both images share this source folder.
+COPY cheatsheets/ /usr/share/nginx/html/cheatsheets/
+
+RUN chmod -R a+r /usr/share/nginx/html
+
+EXPOSE 80

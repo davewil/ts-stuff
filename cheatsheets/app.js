@@ -30,3 +30,71 @@
     if (e.key === 'Escape' && nav.classList.contains('open')) setOpen(false);
   });
 })();
+
+/* Theme switcher — shared with the React hub via the docs-hub:tweaks
+   localStorage key, so picking a theme on a cheatsheet syncs to the hub
+   and vice-versa. The <head> bootstrap on each page already sets the
+   data-theme attribute before CSS applies (no FOUC); this script wires up
+   the click handlers and keeps the active-button class in sync. */
+(function () {
+  const STORAGE_KEY = 'docs-hub:tweaks';
+  const VALID = new Set(['main', 'moon', 'dawn']);
+
+  function readPersisted() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function writeTheme(theme) {
+    try {
+      const merged = { ...readPersisted(), theme };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    } catch (e) {
+      // private mode / quota — ignore
+    }
+  }
+
+  function currentTheme() {
+    const t = document.documentElement.dataset.theme || 'main';
+    return VALID.has(t) ? t : 'main';
+  }
+
+  function syncButtons(theme) {
+    document.querySelectorAll('.theme-switch button[data-theme]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.theme === theme);
+      b.setAttribute('aria-checked', b.dataset.theme === theme ? 'true' : 'false');
+    });
+  }
+
+  function applyTheme(theme) {
+    if (!VALID.has(theme)) return;
+    document.documentElement.dataset.theme = theme;
+    syncButtons(theme);
+  }
+
+  // Initial sync — the head bootstrap already applied data-theme; reflect
+  // that in the button states.
+  syncButtons(currentTheme());
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.theme-switch button[data-theme]');
+    if (!btn) return;
+    const theme = btn.dataset.theme;
+    if (!VALID.has(theme)) return;
+    applyTheme(theme);
+    writeTheme(theme);
+  });
+
+  // Cross-tab sync: if another tab/page updates the theme, follow.
+  window.addEventListener('storage', (e) => {
+    if (e.key !== STORAGE_KEY) return;
+    const next = readPersisted().theme;
+    if (VALID.has(next) && next !== currentTheme()) applyTheme(next);
+  });
+})();
