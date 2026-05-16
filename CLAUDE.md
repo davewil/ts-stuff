@@ -2,6 +2,67 @@
 
 Interview-prep test bed for a regulated multi-tenant Node/TS backend. See [STACK_DECISIONS.md](STACK_DECISIONS.md) and [FUTURE_WEB_API_DEEP.md](FUTURE_WEB_API_DEEP.md) for the broader stack reasoning.
 
+## Citation links — verify before including
+
+External documentation URLs (in cheatsheets, the docs hub, ADRs, READMEs, etc.) **MUST be verified before being committed**. A 404 or broken citation makes the whole document look unmaintained. Treat citation URLs the same way you treat code — they don't ship until they're confirmed working.
+
+### Workflow
+
+Before committing any new or modified external URL:
+
+1. **Resolve it.** Run `curl -sIL -o /dev/null -w '%{http_code} %{url_effective}\n' --max-time 10 -A 'Mozilla/5.0' "$url"` against every new URL.
+2. **Inspect the result:**
+   - `200` with `url_effective` == source → good, commit.
+   - `200` with `url_effective` ≠ source → **update the source** to the canonical URL the redirect lands on (so future readers don't see a URL-bar jump).
+   - `403` / `429` from bot-blockers (Cloudflare etc.) → either confirm in a real browser before keeping, or swap for an equivalent-but-script-friendly resource. Don't ship URLs you can't verify.
+   - `404` / `5xx` / `000` → fix or remove. If the canonical resource has moved (renamed repo, restructured docs site), find the new home; if it's just gone, delete the link rather than leave a phantom citation.
+3. **Re-audit the whole site after the change** (script below) — a renamed docs site often invalidates several citations at once.
+
+### Bulk audit (every external URL in the docs site)
+
+```bash
+# Extract every citation URL from cheatsheets/ + data.js
+python3 - <<'PY' > /tmp/citation-urls.txt
+import re, glob
+urls = set()
+for path in glob.glob('cheatsheets/*.html'):
+    for m in re.finditer(r'href="(https?://[^"]+)"', open(path, encoding='utf-8').read()):
+        urls.add(m.group(1))
+for path in ['apps/docs-hub/data.js']:
+    for m in re.finditer(r'href:\s*"(https?://[^"]+)"', open(path, encoding='utf-8').read()):
+        urls.add(m.group(1))
+SKIP = re.compile(r'^(https?://)?(fonts\.googleapis|unpkg|api\.example|auth\.example|localhost|proxy:)', re.I)
+for u in sorted(u for u in urls if not SKIP.match(u)):
+    print(u)
+PY
+
+# Check them all in parallel, report broken + redirects
+cat /tmp/citation-urls.txt | xargs -P 16 -I{} sh -c '
+  out=$(curl -sIL -o /dev/null -w "%{http_code}|%{url_effective}" --max-time 10 -A "Mozilla/5.0" "$1")
+  code=${out%%|*}; final=${out##*|}
+  if [ "$code" = "405" ] || [ "$code" = "403" ] || [ -z "$code" ]; then
+    out=$(curl -sL -o /dev/null -w "%{http_code}|%{url_effective}" --max-time 10 -A "Mozilla/5.0" "$1")
+    code=${out%%|*}; final=${out##*|}
+  fi
+  printf "%s\t%s\t%s\n" "$code" "$1" "$final"
+' _ {} | tee /tmp/url-check.tsv
+
+awk -F'\t' '$1!~/^(2|3)/ {print "BROKEN  "$0}' /tmp/url-check.tsv
+awk -F'\t' '$1 ~ /^2/ && $2 != $3 {print "MOVED   "$2"  →  "$3}' /tmp/url-check.tsv
+```
+
+Trailing-slash-only redirects (`https://foo.com` → `https://foo.com/`) are noise — ignore them.
+
+### Don't fabricate URLs
+
+If you're not sure a citation URL exists, **do not invent one**. Past failure modes that flagged this rule:
+
+- A made-up domain (`https://www.jsiscoolerthan.you/`) instead of the real Loupe URL (`http://latentflip.com/loupe/`).
+- A stale GitHub path that survived a repo rename (`anthropic-cookbook/tree/main/skills/evals` → repo renamed to `claude-cookbooks`, path restructured).
+- A docs site reorganised without redirects (`docs.claude.com/...` → `platform.claude.com/...`).
+
+When in doubt, search for the canonical resource first; if you can't find it within ~30s, leave the link out and note it as a TODO.
+
 ## Monorepo layout (pnpm workspaces)
 
 ```

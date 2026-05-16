@@ -180,8 +180,8 @@ window.TOPICS = [
       { label: "Skill discovery & invocation map — in progress" }
     ],
     external: [
-      { label: "Claude skills overview", href: "https://docs.claude.com/en/docs/build-with-claude/skills" },
-      { label: "Anthropic cookbook", href: "https://github.com/anthropics/anthropic-cookbook" }
+      { label: "Claude skills overview", href: "https://platform.claude.com/docs/en/build-with-claude/skills" },
+      { label: "Anthropic cookbook", href: "https://github.com/anthropics/claude-cookbooks" }
     ],
     tags: ["agents", "claude", "patterns"]
   },
@@ -198,8 +198,8 @@ window.TOPICS = [
       { label: "Multi-agent patterns — in progress" }
     ],
     external: [
-      { label: "Building effective agents (Anthropic)", href: "https://www.anthropic.com/research/building-effective-agents" },
-      { label: "Claude tool use docs", href: "https://docs.claude.com/en/docs/build-with-claude/tool-use" }
+      { label: "Building effective agents (Anthropic)", href: "https://www.anthropic.com/engineering/building-effective-agents" },
+      { label: "Claude tool use docs", href: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview" }
     ],
     tags: ["agents", "tool-use", "planning"]
   },
@@ -216,7 +216,7 @@ window.TOPICS = [
       { label: "Safety guardrail recipes — coming soon" }
     ],
     external: [
-      { label: "Claude Code hooks", href: "https://docs.claude.com/en/docs/claude-code/hooks" }
+      { label: "Claude Code hooks", href: "https://code.claude.com/docs/en/hooks" }
     ],
     tags: ["guardrails", "ci"]
   },
@@ -233,7 +233,7 @@ window.TOPICS = [
       { label: "Prompt versioning playbook — coming soon" }
     ],
     external: [
-      { label: "Anthropic evals cookbook", href: "https://github.com/anthropics/anthropic-cookbook/tree/main/skills/evals" },
+      { label: "Anthropic evals cookbook", href: "https://github.com/anthropics/claude-cookbooks/tree/main/tool_evaluation" },
       { label: "promptfoo", href: "https://www.promptfoo.dev/" }
     ],
     tags: ["evals", "pipelines", "ops"]
@@ -312,8 +312,8 @@ window.TOPICS = [
       { label: "Subnet router + exit node setup — in progress" }
     ],
     external: [
-      { label: "Tailscale docs", href: "https://tailscale.com/kb/" },
-      { label: "ACL reference", href: "https://tailscale.com/kb/1018/acls" }
+      { label: "Tailscale docs", href: "https://tailscale.com/docs" },
+      { label: "ACL reference", href: "https://tailscale.com/docs/features/access-control/acls" }
     ],
     tags: ["vpn", "wireguard", "mesh"]
   },
@@ -330,8 +330,8 @@ window.TOPICS = [
       { label: "Access policy patterns — in progress" }
     ],
     external: [
-      { label: "Cloudflare Tunnel docs", href: "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/" },
-      { label: "Cloudflare Access", href: "https://developers.cloudflare.com/cloudflare-one/policies/access/" },
+      { label: "Cloudflare Tunnel docs", href: "https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/" },
+      { label: "Cloudflare Access", href: "https://developers.cloudflare.com/cloudflare-one/access-controls/policies/" },
       { label: "Workers", href: "https://developers.cloudflare.com/workers/" }
     ],
     tags: ["edge", "zero-trust", "dns"]
