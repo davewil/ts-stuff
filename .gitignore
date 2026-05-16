@@ -6,9 +6,11 @@ dist/
 .omc/
 .remember/
 .nwave/
-.claude/
-# but track the shared Claude Code project settings (statusline, etc.) —
-# .claude/settings.local.json stays ignored as the per-machine override.
+# Ignore everything inside .claude/ EXCEPT settings.json (the shared
+# statusline config). `.claude/*` rather than `.claude/` so git still
+# recurses into the directory to evaluate the `!` re-include below —
+# `!` can't override an excluded parent directory.
+.claude/*
 !.claude/settings.json
 
 # OS

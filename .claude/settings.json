@@ -1,0 +1,6 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "INPUT=$(cat); echo \"$INPUT\" | node /Volumes/Personal/Users/davidwilliams/.claude/hud/omc-hud.mjs 2>/dev/null; bash \"$(git rev-parse --show-toplevel 2>/dev/null)/scripts/docs-status.sh\" 2>/dev/null || true"
+  }
+}
