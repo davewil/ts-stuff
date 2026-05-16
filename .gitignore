@@ -7,6 +7,9 @@ dist/
 .remember/
 .nwave/
 .claude/
+# but track the shared Claude Code project settings (statusline, etc.) —
+# .claude/settings.local.json stays ignored as the per-machine override.
+!.claude/settings.json
 
 # OS
 .DS_Store
