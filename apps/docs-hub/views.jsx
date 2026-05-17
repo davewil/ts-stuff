@@ -3,14 +3,6 @@
 
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
-// Behind ?a11y=1 — when on, the IDE view's div-as-button elements get
-// tabIndex + Enter/Space key handlers, and the close-tab affordance is
-// promoted to a real <button>. Read at render time; bootstrap script in
-// index.html sets the attribute before React mounts. The existing
-// [data-a11y="on"] :focus-visible rule in site.css supplies the focus ring.
-const A11Y_ON = typeof document !== 'undefined'
-  && document.documentElement.dataset.a11y === 'on';
-
 // Bind Enter/Space to a click-like handler. Space scrolls by default, so
 // preventDefault must run before invoking fn.
 const onActivateKey = (fn) => (e) => {
@@ -265,13 +257,11 @@ function IdeView({ groups, allTopics, selectedId, onSelect, openTabs, onCloseTab
           <div key={g.domain.id} className="dom-group">
             <div
               className="dom-toggle"
+              role="button"
+              tabIndex={0}
               aria-expanded={expanded[g.domain.id]}
               onClick={() => toggle(g.domain.id)}
-              {...(A11Y_ON && {
-                role: 'button',
-                tabIndex: 0,
-                onKeyDown: onActivateKey(() => toggle(g.domain.id)),
-              })}
+              onKeyDown={onActivateKey(() => toggle(g.domain.id))}
             >
               <span className="caret">▾</span>
               <span>{g.domain.path}/</span>
@@ -283,15 +273,13 @@ function IdeView({ groups, allTopics, selectedId, onSelect, openTabs, onCloseTab
               <div
                 key={t.id}
                 className="file-item"
+                role="button"
+                tabIndex={0}
                 data-st={t.status}
                 aria-selected={t.id === selectedId}
+                aria-label={`Open ${t.id}.${t.ext}`}
                 onClick={() => onSelect(t.id)}
-                {...(A11Y_ON && {
-                  role: 'button',
-                  tabIndex: 0,
-                  'aria-label': `Open ${t.id}.${t.ext}`,
-                  onKeyDown: onActivateKey(() => onSelect(t.id)),
-                })}
+                onKeyDown={onActivateKey(() => onSelect(t.id))}
               >
                 <span className="icon">⌬</span>
                 <span className="name">{t.id}<span className="ext">.{t.ext}</span></span>
@@ -311,36 +299,27 @@ function IdeView({ groups, allTopics, selectedId, onSelect, openTabs, onCloseTab
               <div
                 key={tabId}
                 className="tab"
+                role="tab"
+                tabIndex={0}
                 aria-selected={tabId === selectedId}
+                aria-label={`Select tab ${t.id}.${t.ext}`}
                 onClick={() => onSelect(tabId)}
-                {...(A11Y_ON && {
-                  role: 'tab',
-                  tabIndex: 0,
-                  'aria-label': `Select tab ${t.id}.${t.ext}`,
-                  onKeyDown: onActivateKey(() => onSelect(tabId)),
-                })}
+                onKeyDown={onActivateKey(() => onSelect(tabId))}
               >
                 <span className="icon" aria-hidden="true">⌬</span>
                 {t.id}.{t.ext}
-                {A11Y_ON ? (
-                  <button
-                    type="button"
-                    className="close"
-                    aria-label={`Close tab ${t.id}.${t.ext}`}
-                    onClick={(e) => { e.stopPropagation(); onCloseTab(tabId); }}
-                    onKeyDown={(e) => {
-                      // Without this, Enter/Space bubbles to the parent .tab's
-                      // onKeyDown which calls onSelect(tabId) → openTopic in
-                      // app.jsx re-adds the just-closed tab to openTabs.
-                      if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
-                    }}
-                  >×</button>
-                ) : (
-                  <span
-                    className="close"
-                    onClick={(e) => { e.stopPropagation(); onCloseTab(tabId); }}
-                  >×</span>
-                )}
+                <button
+                  type="button"
+                  className="close"
+                  aria-label={`Close tab ${t.id}.${t.ext}`}
+                  onClick={(e) => { e.stopPropagation(); onCloseTab(tabId); }}
+                  onKeyDown={(e) => {
+                    // Without this, Enter/Space bubbles to the parent .tab's
+                    // onKeyDown which calls onSelect(tabId) → openTopic in
+                    // app.jsx re-adds the just-closed tab to openTabs.
+                    if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+                  }}
+                >×</button>
               </div>
             );
           })}

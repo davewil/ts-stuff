@@ -47,18 +47,22 @@
 }
 
 [data-theme="dawn"] {
+  /* Dawn — WCAG-tuned. Decorative tokens (gold/foam/rose/iris/muted/love)
+     darkened from the canonical Rose Pine Dawn so they clear 4.5:1 vs
+     --base for body-sized text. Structural tokens (base/surface/overlay/
+     subtle/text/pine + highlights) kept at the canonical values. */
   --base: #faf4ed;
   --surface: #fffaf3;
   --overlay: #f2e9e1;
-  --muted: #9893a5;
+  --muted: #6a657a;
   --subtle: #797593;
   --text: #575279;
-  --love: #b4637a;
-  --gold: #ea9d34;
-  --rose: #d7827e;
+  --love: #8e3f54;
+  --gold: #8c5d10;
+  --rose: #9a4d4a;
   --pine: #286983;
-  --foam: #56949f;
-  --iris: #907aa9;
+  --foam: #2d6873;
+  --iris: #6b4a8c;
   --hl-low: #f4ede8;
   --hl-med: #dfdad9;
   --hl-high: #cecacd;
@@ -1329,16 +1333,15 @@ body[data-motion="off"] *, body[data-motion="off"] *::before, body[data-motion="
   transition: none !important;
 }
 
-/* ───────────────── A11Y FLAG (opt-in via ?a11y=1) ─────────────────
-   Behind <html data-a11y="on"> — set by the bootstrap in index.html
-   from URL ?a11y=1 (?a11y=0 clears), persisted in localStorage as
-   "docs-hub:a11y". Everything below is additive; default rendering
-   is unchanged unless the flag is on. */
+/* ───────────────── Accessibility baseline ─────────────────
+   Skip link, global focus ring, and anchor scroll-margin. These used to
+   be gated behind ?a11y=1 — promoted to default after on-site validation
+   confirmed no regressions on the dark themes. Dawn palette retune lives
+   in the base [data-theme="dawn"] block above, not here. */
 
-/* Skip link — always in the DOM, only visible when focused under flag */
 .skip-link { position: absolute; left: -9999px; top: auto; }
-[data-a11y="on"] .skip-link:focus,
-[data-a11y="on"] .skip-link:focus-visible {
+.skip-link:focus,
+.skip-link:focus-visible {
   position: fixed;
   left: 1rem;
   top: 1rem;
@@ -1354,27 +1357,14 @@ body[data-motion="off"] *, body[data-motion="off"] *::before, body[data-motion="
   box-shadow: 0 4px 12px rgba(0,0,0,0.35);
 }
 
-/* Global focus indicator — restores or replaces removed outlines */
-[data-a11y="on"] :where(a, button, [role="button"], [role="radio"],
-  [role="tab"], [role="option"], input, select, textarea, summary,
+:where(a, button, [role="button"], [role="radio"], [role="tab"],
+  [role="option"], input, select, textarea, summary,
   [tabindex]):focus-visible {
   outline: 2px solid var(--rose);
   outline-offset: 2px;
   border-radius: 4px;
 }
 
-/* Anchor targets — keep focused element clear of sticky chrome (.chrome +
-   .filter ≈ ~88px combined). Pad more than that so heading text is visible. */
-[data-a11y="on"] :where([id]) { scroll-margin-top: 120px; }
-
-/* Dawn palette retune — bring decorative text tokens to ≥4.5:1 vs --base
-   (#faf4ed). Hex values chosen to keep the Rose Pine hue family while
-   passing 1.4.3 AA. Tested with wcag-contrast-ratio against --base. */
-html[data-a11y="on"][data-theme="dawn"] {
-  --gold: #8c5d10;
-  --foam: #2d6873;
-  --rose: #9a4d4a;
-  --iris: #6b4a8c;
-  --muted: #6a657a;
-  --love: #8e3f54;
-}
+/* Keep anchor-jumped headings clear of the sticky .chrome + .filter
+   (combined ≈ 88px; pad to 120 for breathing room). */
+:where([id]) { scroll-margin-top: 120px; }

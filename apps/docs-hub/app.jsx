@@ -35,20 +35,15 @@ const INITIAL_TWEAKS = (() => {
   }
 })();
 
+// Dawn hexes here are WCAG-tuned (clear 4.5:1 vs --base #faf4ed). Main/Moon
+// kept at canonical Rose Pine — those themes pass contrast on a dark base
+// without modification.
 const ACCENT_MAP = {
-  rose: { var: "--rose", hex: { main: "#ebbcba", moon: "#ea9a97", dawn: "#d7827e" } },
-  iris: { var: "--iris", hex: { main: "#c4a7e7", moon: "#c4a7e7", dawn: "#907aa9" } },
-  foam: { var: "--foam", hex: { main: "#9ccfd8", moon: "#9ccfd8", dawn: "#56949f" } },
-  gold: { var: "--gold", hex: { main: "#f6c177", moon: "#f6c177", dawn: "#ea9d34" } },
-  love: { var: "--love", hex: { main: "#eb6f92", moon: "#eb6f92", dawn: "#b4637a" } }
-};
-
-// Behind ?a11y=1 — Dawn-only accent replacements that clear WCAG 1.4.3 (4.5:1
-// vs --base). The accent-applying useEffect writes an inline style on
-// documentElement, which beats CSS variable overrides; this map is consulted
-// when the flag is on so the inline write produces a contrast-passing value.
-const ACCENT_MAP_DAWN_A11Y = {
-  rose: "#9a4d4a", iris: "#6b4a8c", foam: "#2d6873", gold: "#8c5d10", love: "#8e3f54"
+  rose: { var: "--rose", hex: { main: "#ebbcba", moon: "#ea9a97", dawn: "#9a4d4a" } },
+  iris: { var: "--iris", hex: { main: "#c4a7e7", moon: "#c4a7e7", dawn: "#6b4a8c" } },
+  foam: { var: "--foam", hex: { main: "#9ccfd8", moon: "#9ccfd8", dawn: "#2d6873" } },
+  gold: { var: "--gold", hex: { main: "#f6c177", moon: "#f6c177", dawn: "#8c5d10" } },
+  love: { var: "--love", hex: { main: "#eb6f92", moon: "#eb6f92", dawn: "#8e3f54" } }
 };
 
 const VIEW_OPTIONS = [
@@ -106,10 +101,7 @@ function App() {
     document.body.dataset.motion = t.motion;
     document.body.dataset.view = t.view;
     const accent = ACCENT_MAP[t.accent] || ACCENT_MAP.rose;
-    const a11yOn = document.documentElement.dataset.a11y === "on";
-    const hex = (a11yOn && t.theme === "dawn" && ACCENT_MAP_DAWN_A11Y[t.accent])
-      ? ACCENT_MAP_DAWN_A11Y[t.accent]
-      : (accent.hex[t.theme] || accent.hex.main);
+    const hex = accent.hex[t.theme] || accent.hex.main;
     document.documentElement.style.setProperty("--rose", hex);
   }, [t.theme, t.density, t.motion, t.accent, t.view]);
 
