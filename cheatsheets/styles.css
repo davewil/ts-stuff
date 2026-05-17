@@ -730,3 +730,50 @@ footer a:hover { color: var(--rose); }
 }
 
 body.nav-locked { overflow: hidden; }
+
+/* ───────────────── A11Y FLAG (opt-in via ?a11y=1) ─────────────────
+   Behind <html data-a11y="on"> — set by the per-page bootstrap script
+   from URL ?a11y=1 (?a11y=0 clears), persisted in localStorage as
+   "docs-hub:a11y". Everything below is additive; default rendering
+   is unchanged unless the flag is on. */
+
+.skip-link { position: absolute; left: -9999px; top: auto; }
+[data-a11y="on"] .skip-link:focus,
+[data-a11y="on"] .skip-link:focus-visible {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 1000;
+  padding: 0.6rem 1rem;
+  background: var(--rose);
+  color: var(--base);
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+}
+
+[data-a11y="on"] :where(a, button, [role="button"], [role="radio"],
+  [role="tab"], [role="option"], input, select, textarea, summary,
+  [tabindex]):focus-visible {
+  outline: 2px solid var(--rose);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Sticky nav.toc top ≈ 0, but on desktop a card heading just under it gets
+   half-clipped on anchor jump. Pad clearance for sticky chrome. */
+[data-a11y="on"] :where([id]) { scroll-margin-top: 88px; }
+
+/* Dawn palette retune — bring decorative text tokens to ≥4.5:1 vs --base
+   (#faf4ed). Mirrors the same overrides as apps/docs-hub/site.css. */
+html[data-a11y="on"][data-theme="dawn"] {
+  --gold: #8c5d10;
+  --foam: #2d6873;
+  --rose: #9a4d4a;
+  --iris: #6b4a8c;
+  --muted: #6a657a;
+  --love: #8e3f54;
+}

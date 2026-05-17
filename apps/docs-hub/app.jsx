@@ -43,6 +43,14 @@ const ACCENT_MAP = {
   love: { var: "--love", hex: { main: "#eb6f92", moon: "#eb6f92", dawn: "#b4637a" } }
 };
 
+// Behind ?a11y=1 — Dawn-only accent replacements that clear WCAG 1.4.3 (4.5:1
+// vs --base). The accent-applying useEffect writes an inline style on
+// documentElement, which beats CSS variable overrides; this map is consulted
+// when the flag is on so the inline write produces a contrast-passing value.
+const ACCENT_MAP_DAWN_A11Y = {
+  rose: "#9a4d4a", iris: "#6b4a8c", foam: "#2d6873", gold: "#8c5d10", love: "#8e3f54"
+};
+
 const VIEW_OPTIONS = [
   { id: "atlas",    label: "Atlas" },
   { id: "terminal", label: "Terminal" },
@@ -98,7 +106,10 @@ function App() {
     document.body.dataset.motion = t.motion;
     document.body.dataset.view = t.view;
     const accent = ACCENT_MAP[t.accent] || ACCENT_MAP.rose;
-    const hex = accent.hex[t.theme] || accent.hex.main;
+    const a11yOn = document.documentElement.dataset.a11y === "on";
+    const hex = (a11yOn && t.theme === "dawn" && ACCENT_MAP_DAWN_A11Y[t.accent])
+      ? ACCENT_MAP_DAWN_A11Y[t.accent]
+      : (accent.hex[t.theme] || accent.hex.main);
     document.documentElement.style.setProperty("--rose", hex);
   }, [t.theme, t.density, t.motion, t.accent, t.view]);
 
@@ -313,7 +324,7 @@ function App() {
         </div>
       )}
 
-      <main className="canvas">
+      <main id="main" className="canvas">
         {visibleCount === 0 && t.view !== "ide" ? (
           <div className="no-results">
             <div className="big">0</div>
