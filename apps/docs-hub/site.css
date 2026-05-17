@@ -823,6 +823,13 @@ body[data-view="ide"] .ide-tabs .tab[aria-selected="true"]::before {
 body[data-view="ide"] .ide-tabs .tab .close {
   opacity: 0.4;
   margin-left: 0.3rem;
+  /* Reset for the a11y-flag button variant — share visuals with the <span>. */
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
 }
 body[data-view="ide"] .ide-tabs .tab:hover .close { opacity: 1; }
 
