@@ -207,6 +207,9 @@ jobs:
     name: Deploy (static site)
     needs: quality
     if: startsWith(github.ref, 'refs/tags/docs-v')
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/_deploy-docker-service.yml
     secrets: inherit
     with:
@@ -237,6 +240,9 @@ jobs:
     name: Deploy (docs hub)
     needs: quality-hub
     if: startsWith(github.ref, 'refs/tags/hub-v')
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/_deploy-docker-service.yml
     secrets: inherit
     with:
