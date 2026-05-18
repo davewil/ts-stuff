@@ -1,0 +1,176 @@
+name: _Deploy Docker Service (reusable)
+
+# Reusable workflow: builds an image, pushes it to GHCR, deploys it to the
+# Docker host over Tailscale+SSH, and runs a path-list smoke test against the
+# new container. Called by docs-deploy.yml for both the static-site and
+# docs-hub lanes.
+#
+# Caller passes `secrets: inherit` so the same secrets used by the parent
+# workflow flow through: TS_OAUTH_CLIENT_ID, TAILSCALE_AUTHKEY,
+# DEPLOY_SSH_KEY, DEPLOY_HOST.
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: GHCR image reference without tag (e.g. ghcr.io/owner/name).
+        required: true
+        type: string
+      dockerfile:
+        description: Path to the Dockerfile relative to repo root.
+        required: true
+        type: string
+      service:
+        description: docker-compose service name on the host.
+        required: true
+        type: string
+      recreate-all:
+        description: >
+          When true, force-recreate every service in the compose file (needed
+          when Caddy labels on sibling services have changed). When false,
+          only the named service is recreated.
+        required: false
+        type: boolean
+        default: false
+      smoke-paths:
+        description: >
+          Newline-separated list of paths to GET against http://localhost/
+          inside the running container. Empty lines and lines starting with #
+          are ignored.
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ inputs.dockerfile }}
+          push: true
+          tags: |
+            ${{ inputs.image }}:latest
+            ${{ inputs.image }}:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_AUTHKEY }}
+          tags: tag:ci
+
+      - name: Write SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Copy compose file to host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh "root@$DEPLOY_HOST" "mkdir -p /root/docs"
+          scp docs/docker-compose.prod.yml "root@$DEPLOY_HOST:/root/docs/docker-compose.prod.yml"
+
+      - name: Ensure GHCR auth on host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          if ! ssh "root@$DEPLOY_HOST" "docker pull $IMAGE:latest --quiet" 2>/dev/null; then
+            printf '%s' "$GHCR_TOKEN" | ssh "root@$DEPLOY_HOST" "docker login ghcr.io -u $GHCR_USER --password-stdin"
+          fi
+
+      - name: Deploy and smoke test
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          SERVICE: ${{ inputs.service }}
+          RECREATE_ALL: ${{ inputs.recreate-all }}
+          SMOKE_PATHS: ${{ inputs.smoke-paths }}
+        run: |
+          # Base64-encode the path list so it survives the ssh command-line
+          # boundary intact (ssh joins remote-command args with spaces, which
+          # would otherwise mangle the newlines).
+          SMOKE_PATHS_B64=$(printf '%s' "$SMOKE_PATHS" | base64 | tr -d '\n')
+
+          ssh -o StrictHostKeyChecking=accept-new "root@$DEPLOY_HOST" \
+            "SERVICE='$SERVICE' RECREATE_ALL='$RECREATE_ALL' SMOKE_PATHS_B64='$SMOKE_PATHS_B64' bash -s" <<'EOF'
+            set -e
+            cd /root/docs
+
+            SMOKE_PATHS=$(echo "$SMOKE_PATHS_B64" | base64 -d)
+
+            echo "Pulling latest $SERVICE image..."
+            docker compose -f docker-compose.prod.yml pull "$SERVICE"
+
+            if [ "$RECREATE_ALL" = "true" ]; then
+              echo "Recreating all services (label propagation)..."
+              docker compose -f docker-compose.prod.yml up -d --force-recreate --no-build
+            else
+              echo "Recreating $SERVICE container..."
+              docker compose -f docker-compose.prod.yml up -d --force-recreate --no-build "$SERVICE"
+            fi
+
+            echo "Waiting for $SERVICE health..."
+            for i in $(seq 1 20); do
+              if docker compose -f docker-compose.prod.yml exec -T "$SERVICE" wget -qO- http://localhost/health 2>/dev/null | grep -q ok; then
+                echo "$SERVICE healthy after ${i}s"
+                break
+              fi
+              sleep 1
+            done
+
+            echo "=== Smoke test ==="
+            fail=0
+            while IFS= read -r path; do
+              case "$path" in
+                ''|\#*) continue ;;
+              esac
+              code=$(docker compose -f docker-compose.prod.yml exec -T "$SERVICE" \
+                wget -S -qO /dev/null "http://localhost/$path" 2>&1 \
+                | awk '/HTTP\//{print $2; exit}')
+              if [ "$code" = "200" ]; then
+                echo "200  /$path"
+              else
+                echo "FAIL $code /$path"
+                fail=1
+              fi
+            done <<<"$SMOKE_PATHS"
+
+            echo "=== Container status ==="
+            docker compose -f docker-compose.prod.yml ps "$SERVICE"
+
+            docker image prune -f >/dev/null 2>&1 || true
+
+            if [ "$fail" = "1" ]; then
+              echo "$SERVICE deploy smoke test failed."
+              exit 1
+            fi
+
+            echo "$SERVICE deploy complete."
+          EOF
