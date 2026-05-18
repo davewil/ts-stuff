@@ -1,0 +1,14 @@
+# URL paths smoke-tested against the static-site image (docs.davewil.dev).
+# Consumed by both the quality job (local docker run) and the deploy job
+# (prod compose container). Lines starting with `#` and blank lines are
+# ignored. Paths are appended to http://<host>/.
+index.html
+cheatsheets-index.html
+event-loop-index.html
+typescript-cheatsheet.html
+curl-cheatsheet.html
+js-q-explainer.html
+js-q-2-explainer.html
+await-explainer.html
+styles.css
+app.js

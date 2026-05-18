@@ -32,11 +32,13 @@ on:
         required: false
         type: boolean
         default: false
-      smoke-paths:
+      smoke-paths-file:
         description: >
-          Newline-separated list of paths to GET against http://localhost/
-          inside the running container. Empty lines and lines starting with #
-          are ignored.
+          Path (relative to repo root) to a file containing newline-separated
+          URL paths to GET against http://localhost/ inside the running
+          container. Empty lines and lines starting with `#` are ignored.
+          Same file is consumed by the upstream quality job so drift is
+          impossible.
         required: true
         type: string
 
@@ -111,12 +113,16 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           SERVICE: ${{ inputs.service }}
           RECREATE_ALL: ${{ inputs.recreate-all }}
-          SMOKE_PATHS: ${{ inputs.smoke-paths }}
+          SMOKE_PATHS_FILE: ${{ inputs.smoke-paths-file }}
         run: |
+          if [ ! -f "$SMOKE_PATHS_FILE" ]; then
+            echo "smoke-paths-file not found in checkout: $SMOKE_PATHS_FILE"
+            exit 1
+          fi
           # Base64-encode the path list so it survives the ssh command-line
           # boundary intact (ssh joins remote-command args with spaces, which
           # would otherwise mangle the newlines).
-          SMOKE_PATHS_B64=$(printf '%s' "$SMOKE_PATHS" | base64 | tr -d '\n')
+          SMOKE_PATHS_B64=$(base64 < "$SMOKE_PATHS_FILE" | tr -d '\n')
 
           ssh -o StrictHostKeyChecking=accept-new "root@$DEPLOY_HOST" \
             "SERVICE='$SERVICE' RECREATE_ALL='$RECREATE_ALL' SMOKE_PATHS_B64='$SMOKE_PATHS_B64' bash -s" <<'EOF'

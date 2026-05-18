@@ -10,6 +10,8 @@ on:
       - "Dockerfile.docs"
       - "Dockerfile.docs-hub"
       - ".github/workflows/docs-deploy.yml"
+      - ".github/workflows/_deploy-docker-service.yml"
+      - ".github/smoke/**"
     tags:
       - "docs-v*"
       - "hub-v*"
@@ -22,6 +24,8 @@ on:
       - "Dockerfile.docs"
       - "Dockerfile.docs-hub"
       - ".github/workflows/docs-deploy.yml"
+      - ".github/workflows/_deploy-docker-service.yml"
+      - ".github/smoke/**"
   workflow_dispatch:
 
 jobs:
@@ -98,18 +102,17 @@ jobs:
             sleep 1
           done
           fail=0
-          for f in index.html cheatsheets-index.html event-loop-index.html \
-                   typescript-cheatsheet.html curl-cheatsheet.html \
-                   js-q-explainer.html js-q-2-explainer.html await-explainer.html \
-                   styles.css app.js; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:18080/$f")
+          # Path list shared with the deploy job — drift impossible.
+          while IFS= read -r path; do
+            case "$path" in ''|\#*) continue ;; esac
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:18080/$path")
             if [ "$code" = "200" ]; then
-              echo "200  /$f"
+              echo "200  /$path"
             else
-              echo "FAIL $code /$f"
+              echo "FAIL $code /$path"
               fail=1
             fi
-          done
+          done < .github/smoke/docs.txt
           docker logs docs-smoke || true
           docker rm -f docs-smoke
           exit $fail
@@ -167,35 +170,19 @@ jobs:
             sleep 1
           done
           fail=0
-          # Root files
-          for f in index.html site.css data.js app.jsx views.jsx tweaks-panel.jsx wallpapers.jsx; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:18081/$f")
+          # Path list shared with the deploy-hub job — drift impossible.
+          # Covers root files, /cheatsheets/* nested paths, and legacy
+          # root paths that nginx rewrites into /cheatsheets/X.html.
+          while IFS= read -r path; do
+            case "$path" in ''|\#*) continue ;; esac
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:18081/$path")
             if [ "$code" = "200" ]; then
-              echo "200  /$f"
+              echo "200  /$path"
             else
-              echo "FAIL $code /$f"
+              echo "FAIL $code /$path"
               fail=1
             fi
-          done
-          # Cheatsheet content nested under /cheatsheets/
-          for f in cheatsheets/typescript-cheatsheet.html \
-                   cheatsheets/curl-cheatsheet.html \
-                   cheatsheets/event-loop-index.html \
-                   cheatsheets/js-q-explainer.html \
-                   cheatsheets/js-q-2-explainer.html \
-                   cheatsheets/await-explainer.html \
-                   cheatsheets/styles.css \
-                   cheatsheets/app.js \
-                   cheatsheets/wallpaper-engine.js \
-                   cheatsheets/tweaks.js; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:18081/$f")
-            if [ "$code" = "200" ]; then
-              echo "200  /$f"
-            else
-              echo "FAIL $code /$f"
-              fail=1
-            fi
-          done
+          done < .github/smoke/docs-hub.txt
           docker logs docs-hub-smoke || true
           docker rm -f docs-hub-smoke
           exit $fail
@@ -216,17 +203,7 @@ jobs:
       image: ghcr.io/davewil/ts-stuff-docs
       dockerfile: Dockerfile.docs
       service: docs
-      smoke-paths: |
-        index.html
-        cheatsheets-index.html
-        event-loop-index.html
-        typescript-cheatsheet.html
-        curl-cheatsheet.html
-        js-q-explainer.html
-        js-q-2-explainer.html
-        await-explainer.html
-        styles.css
-        app.js
+      smoke-paths-file: .github/smoke/docs.txt
 
   # ─────────────────────────────────────────────────────────────────────
   # DEPLOY — docs hub (docs-next.davewil.dev) — gated on hub-v* tag
@@ -250,31 +227,4 @@ jobs:
       dockerfile: Dockerfile.docs-hub
       service: docs-hub
       recreate-all: true
-      smoke-paths: |
-        # hub root
-        index.html
-        site.css
-        data.js
-        app.jsx
-        views.jsx
-        tweaks-panel.jsx
-        wallpapers.jsx
-        # hub cheatsheets/
-        cheatsheets/typescript-cheatsheet.html
-        cheatsheets/curl-cheatsheet.html
-        cheatsheets/event-loop-index.html
-        cheatsheets/js-q-explainer.html
-        cheatsheets/js-q-2-explainer.html
-        cheatsheets/await-explainer.html
-        cheatsheets/styles.css
-        cheatsheets/app.js
-        cheatsheets/wallpaper-engine.js
-        cheatsheets/tweaks.js
-        # legacy root paths (nginx rewrites to /cheatsheets/X.html)
-        event-loop-index.html
-        cheatsheets-index.html
-        typescript-cheatsheet.html
-        curl-cheatsheet.html
-        js-q-explainer.html
-        js-q-2-explainer.html
-        await-explainer.html
+      smoke-paths-file: .github/smoke/docs-hub.txt

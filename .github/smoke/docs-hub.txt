@@ -1,0 +1,35 @@
+# URL paths smoke-tested against the docs-hub image (docs-next.davewil.dev).
+# Consumed by both the quality-hub job (local docker run) and the deploy-hub
+# job (prod compose container). Lines starting with `#` and blank lines are
+# ignored. Paths are appended to http://<host>/.
+
+# hub root
+index.html
+site.css
+data.js
+app.jsx
+views.jsx
+tweaks-panel.jsx
+wallpapers.jsx
+
+# hub cheatsheets/
+cheatsheets/typescript-cheatsheet.html
+cheatsheets/curl-cheatsheet.html
+cheatsheets/event-loop-index.html
+cheatsheets/js-q-explainer.html
+cheatsheets/js-q-2-explainer.html
+cheatsheets/await-explainer.html
+cheatsheets/styles.css
+cheatsheets/app.js
+cheatsheets/wallpaper-engine.js
+cheatsheets/tweaks.js
+
+# legacy root paths (nginx rewrites to /cheatsheets/X.html — verifies
+# pre-promotion deep links still resolve)
+event-loop-index.html
+cheatsheets-index.html
+typescript-cheatsheet.html
+curl-cheatsheet.html
+js-q-explainer.html
+js-q-2-explainer.html
+await-explainer.html
