@@ -36,7 +36,7 @@ jobs:
     name: Quality (static site)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Validate HTML with Python html.parser
         run: |
@@ -124,7 +124,7 @@ jobs:
     name: Quality (docs hub)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Verify expected hub files are present
         run: |
