@@ -33,9 +33,10 @@ Ordered by severity (Critical first), then by effort to ship.
 
 #### C3 — Cheatsheets theme switcher: broken radiogroup
 - **SC:** 4.1.2 (A)
-- **Where:** [cheatsheets/cheatsheets-index.html:76-80](cheatsheets/cheatsheets-index.html#L76) and the same pattern in `event-loop-index.html`. JS in `cheatsheets/tweaks.js` (not yet read in this pass).
+- **Where:** [cheatsheets/cheatsheets-index.html:76-80](cheatsheets/cheatsheets-index.html#L76) and the same pattern in `event-loop-index.html`, `typescript-cheatsheet.html`, `curl-cheatsheet.html`, and (added 2026-07-09) `ffmpeg-cheatsheet.html`. JS in `cheatsheets/tweaks.js` (not yet read in this pass).
 - **Gap:** `<div role="radiogroup">` containing plain `<button>` children — no `role="radio"`, no `aria-checked`, no arrow-key navigation. The React hub version (`app.jsx:223-237`) gets this right and is a good reference.
-- **Fix sketch:** either drop `role="radiogroup"` (treat as plain buttons with `aria-pressed`), or add `role="radio" aria-checked` + arrow-key handler in `tweaks.js`. Smaller change in tweaks.js (~15 lines).
+- **Fix sketch:** either drop `role="radiogroup"` (treat as plain buttons with `aria-pressed`), or add `role="radio" aria-checked` + arrow-key handler in `tweaks.js`. Smaller change in tweaks.js (~15 lines) — fixing it there fixes every cheatsheet page at once, since they all share the file.
+- **Note:** the new ffmpeg/ffprobe cheatsheet cloned this nav verbatim for parity with the existing pages rather than fixing it in isolation (that would mean a per-page inconsistency until the shared `tweaks.js` fix lands). This is a deliberate decision, not an oversight — see `docs/superpowers/specs/2026-07-09-ffmpeg-ffprobe-cheatsheet-design.md`.
 
 ### High
 

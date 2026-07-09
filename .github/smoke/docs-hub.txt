@@ -15,6 +15,7 @@ wallpapers.jsx
 # hub cheatsheets/
 cheatsheets/typescript-cheatsheet.html
 cheatsheets/curl-cheatsheet.html
+cheatsheets/ffmpeg-cheatsheet.html
 cheatsheets/event-loop-index.html
 cheatsheets/js-q-explainer.html
 cheatsheets/js-q-2-explainer.html

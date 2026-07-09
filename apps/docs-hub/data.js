@@ -41,6 +41,14 @@ window.DOMAINS = [
     glyph: "▣",
     blurb: "Self-hosted infrastructure — overlay networks, edge routing, hypervisors, private cloud.",
     path: "homelab"
+  },
+  {
+    id: "media-tools",
+    num: "06",
+    title: "Media / CLI Tools",
+    glyph: "▶",
+    blurb: "Codecs, containers, filter graphs — the tools that convert, inspect, and stream video/audio.",
+    path: "media-tools"
   }
 ];
 
@@ -372,6 +380,27 @@ window.TOPICS = [
       { label: "Authentik", href: "https://goauthentik.io/" }
     ],
     tags: ["self-hosted", "gitops", "k8s"]
+  },
+
+  // ─── Media / CLI Tools ──────────────────────────────────────
+  {
+    id: "ffmpeg",
+    domain: "media-tools",
+    title: "ffmpeg / ffprobe",
+    ext: "sh",
+    description: "Transcoding, filter graphs, streaming, hardware acceleration — paired with ffprobe for stream inspection.",
+    status: "reference",
+    updated: "2026-07",
+    href: "cheatsheets/ffmpeg-cheatsheet.html",
+    subLinks: [
+      { label: "ffmpeg/ffprobe cheatsheet (15 sections)", href: "cheatsheets/ffmpeg-cheatsheet.html" }
+    ],
+    external: [
+      { label: "FFmpeg documentation", href: "https://ffmpeg.org/documentation.html" },
+      { label: "Filters reference", href: "https://ffmpeg.org/ffmpeg-filters.html" },
+      { label: "Formats & muxers reference", href: "https://ffmpeg.org/ffmpeg-formats.html" }
+    ],
+    tags: ["media", "cli", "video"]
   }
 ];
 

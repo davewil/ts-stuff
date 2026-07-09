@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cheatsheets — TypeScript 6.0 · curl · Rose Pine</title>
+<title>Cheatsheets — TypeScript 6.0 · curl · ffmpeg · Rose Pine</title>
 <script>(function(){try{var t=(JSON.parse(localStorage.getItem("docs-hub:tweaks")||"{}")||{}).theme;if(t==="moon"||t==="dawn"||t==="main"){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
 <link rel="stylesheet" href="styles.css?v=4">
 <style>
@@ -24,8 +24,9 @@
     font-family: "JetBrains Mono", monospace;
     margin-right: 0.4rem;
   }
-  section.preview .badge.ts   { color: var(--gold); border-color: var(--gold); }
-  section.preview .badge.curl { color: var(--love); border-color: var(--love); }
+  section.preview .badge.ts     { color: var(--gold); border-color: var(--gold); }
+  section.preview .badge.curl   { color: var(--love); border-color: var(--love); }
+  section.preview .badge.ffmpeg { color: var(--pine); border-color: var(--pine); }
 
   section.preview .open {
     display: inline-block;
@@ -81,8 +82,8 @@
 </nav>
 
 <header>
-  <h1><span class="accent">Cheatsheets</span> · TypeScript &amp; curl</h1>
-  <p>Two standalone pocket references. Independent of each other and of the <a class="inline-docs" href="event-loop-index.html">JS event-loop series</a>. Pick one — there's no reading order.</p>
+  <h1><span class="accent">Cheatsheets</span> · TypeScript, curl &amp; ffmpeg</h1>
+  <p>Three standalone pocket references. Independent of each other and of the <a class="inline-docs" href="event-loop-index.html">JS event-loop series</a>. Pick one — there's no reading order.</p>
 </header>
 
 <button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
@@ -92,9 +93,11 @@
   <a href="#about">About</a>
   <a href="#ts">TypeScript 6.0</a>
   <a href="#curl">curl</a>
+  <a href="#ffmpeg">ffmpeg / ffprobe</a>
   <a href="#architecture">How it's built</a>
   <a href="#resources-ts">TS resources</a>
   <a href="#resources-curl">curl resources</a>
+  <a href="#resources-ffmpeg">ffmpeg resources</a>
   <a href="#tools">Tools</a>
   <a href="#credits">Credits</a>
   <a href="event-loop-index.html">→ Event-loop series</a>
@@ -106,10 +109,11 @@
 <!-- ABOUT -->
 <section class="card hero" id="about">
   <h2><span class="icon">▸</span> About these cheatsheets</h2>
-  <p>Two unrelated quick-references that happen to share the Rose Pine theme:</p>
+  <p>Three unrelated quick-references that happen to share the Rose Pine theme:</p>
   <ul>
     <li><strong>TypeScript 6.0</strong> — 23 sections from primitives through 5.x → 6.0 language features. Every section heading links to the corresponding chapter of the TypeScript Handbook; the "What's new" card has per-version links to each release-notes page (5.0 → 6.0). Verified live against npm at write time.</li>
     <li><strong>curl</strong> — 16 sections of HTTP-stack recipes covering methods, headers, body forms, auth (Basic / Bearer / Digest / NTLM / SigV4 / .netrc), TLS / mTLS, proxies, retries &amp; timing, cookies &amp; sessions, parallel transfers, and non-HTTP protocols (FTP, SMTP, IMAP, WebSocket, MQTT).</li>
+    <li><strong>ffmpeg / ffprobe</strong> — 15 sections covering transcoding, filter graphs, trimming/concatenation, audio (loudness normalization), subtitles, GIF/thumbnail extraction, streaming (HLS/DASH/RTMP), hardware acceleration, and ffprobe inspection/scripting. Nearly every command was run against a real file while writing this; the handful that couldn't be — subtitle burn-in and <code class="inline">drawtext</code> (this build lacks libass/freetype), RTMP push and the <code class="inline">fswatch</code> loop (no live endpoint / tool on hand), and the NVENC/VAAPI hardware encoders (no matching GPU) — are sourced from ffmpeg.org/NVIDIA's official docs instead and marked as such.</li>
   </ul>
 
   <h3>Design principle</h3>
@@ -152,6 +156,24 @@
   <a class="open" href="curl-cheatsheet.html">Open cheatsheet →</a>
 </section>
 
+<!-- FFMPEG -->
+<section class="card preview" id="ffmpeg">
+  <h2><span class="badge ffmpeg">ffmpeg</span> <a href="ffmpeg-cheatsheet.html">ffmpeg / ffprobe cheatsheet</a></h2>
+  <p>Comprehensive recipes for transcoding, filtering, and inspecting media — 15 sections from a simple format conversion to two-pass loudness normalization and HLS segmenting. Paired with ffprobe throughout for stream inspection and scripting.</p>
+  <ul>
+    <li>Codecs &amp; containers, CRF/two-pass transcoding quality control</li>
+    <li>Resize, crop, pad, trim, concatenate (matching + mismatched codecs)</li>
+    <li>Filter graphs (<code class="inline">-filter_complex</code>), overlays, drawtext</li>
+    <li>Audio extraction/replacement, <code class="inline">loudnorm</code> two-pass normalization</li>
+    <li>Subtitles: burn-in vs. soft-mux, extraction</li>
+    <li>Thumbnails, interval frame extraction, two-pass palette GIFs</li>
+    <li>Streaming: HLS, DASH, RTMP push</li>
+    <li>Hardware acceleration: VideoToolbox (verified), NVENC &amp; VAAPI (docs-only)</li>
+    <li>ffprobe: stream/format inspection, JSON output, batch &amp; scripting recipes</li>
+  </ul>
+  <a class="open" href="ffmpeg-cheatsheet.html">Open cheatsheet →</a>
+</section>
+
 <!-- ARCHITECTURE -->
 <section class="card" id="architecture">
   <h2><span class="icon">▸</span> How it's built</h2>
@@ -161,12 +183,13 @@
     ├── <span class="file">cheatsheets-index.html</span>  <span class="com">← you are here</span>
     ├── <span class="file">typescript-cheatsheet.html</span>
     ├── <span class="file">curl-cheatsheet.html</span>
+    ├── <span class="file">ffmpeg-cheatsheet.html</span>
     ├── <span class="file">styles.css</span>              <span class="com">← shared Rose Pine, responsive grid, burger menu</span>
     └── <span class="file">app.js</span>                  <span class="com">← shared drawer toggle</span></pre>
 
   <ul>
     <li>Each cheatsheet links <code class="inline">styles.css</code> and <code class="inline">app.js</code> (same directory)</li>
-    <li>Only file-specific syntax-token colours stay inline (TS uses gold / iris / foam; curl uses love / gold / foam — overlapping class names so they have to remain per-file)</li>
+    <li>Only file-specific syntax-token colours stay inline (TS uses gold / iris / foam; curl uses love / gold / foam; ffmpeg uses pine / gold / foam / iris / rose — overlapping class names so they have to remain per-file)</li>
     <li>Responsive 1 / 2 / 3-col grid driven by <code class="inline">@media</code> at 760 px and 1200 px</li>
     <li><code class="inline">max-width: min(2400px, 96vw)</code> lets cards fill ultrawide monitors without absurd line lengths</li>
     <li>Mobile (&lt; 760 px) gets a hamburger drawer with full ARIA states, scroll lock, Escape-to-close, viewport-resize auto-dismiss</li>
@@ -232,6 +255,33 @@
   </ul>
 </section>
 
+<!-- FFMPEG RESOURCES -->
+<section class="card" id="resources-ffmpeg">
+  <h2><span class="icon">▸</span> Further reading — ffmpeg</h2>
+  <ul class="res-list">
+    <li>
+      <a href="https://ffmpeg.org/documentation.html" target="_blank" rel="noopener">FFmpeg documentation hub</a>
+      <span class="src">ffmpeg.org</span>
+      <span class="desc">Entry point to the full ffmpeg/ffprobe/ffplay manuals, the filters reference, and the codecs/formats guides.</span>
+    </li>
+    <li>
+      <a href="https://ffmpeg.org/ffmpeg-filters.html" target="_blank" rel="noopener">Filters reference</a>
+      <span class="src">ffmpeg.org</span>
+      <span class="desc">Every filter (<code class="inline">scale</code>, <code class="inline">crop</code>, <code class="inline">loudnorm</code>, <code class="inline">palettegen</code>/<code class="inline">paletteuse</code>, …) with full option lists.</span>
+    </li>
+    <li>
+      <a href="https://ffmpeg.org/ffmpeg-formats.html" target="_blank" rel="noopener">Formats &amp; muxers reference</a>
+      <span class="src">ffmpeg.org</span>
+      <span class="desc">Container/muxer options — the concat demuxer, HLS/DASH segment muxers, and everything else format-side.</span>
+    </li>
+    <li>
+      <a href="https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/ffmpeg-with-nvidia-gpu/index.html" target="_blank" rel="noopener">Using FFmpeg with NVIDIA GPU acceleration</a>
+      <span class="src">nvidia.com</span>
+      <span class="desc">NVENC/NVDEC flags this cheatsheet's hardware-acceleration section couldn't verify locally (no Nvidia GPU on hand).</span>
+    </li>
+  </ul>
+</section>
+
 <!-- TOOLS -->
 <section class="card" id="tools">
   <h2><span class="icon">▸</span> Tools &amp; sandboxes</h2>
@@ -251,6 +301,11 @@
       <span class="src">reqbin.com</span>
       <span class="desc">Alternative request inspector / public test endpoints. Useful when httpbin is rate-limiting.</span>
     </li>
+    <li>
+      Local: <code class="inline">ffmpeg -filters</code> / <code class="inline">ffmpeg -encoders</code>
+      <span class="src">terminal</span>
+      <span class="desc">Lists exactly what your local build supports — always check before assuming a filter or hardware encoder is available.</span>
+    </li>
   </ul>
 </section>
 
@@ -260,7 +315,7 @@
   <ul>
     <li><strong>Theme:</strong> <a class="inline-docs" href="https://rosepinetheme.com" target="_blank" rel="noopener">Rose Pine</a> — palette by Emilia Dunfelt &amp; contributors. Used in its "Main" variant with the standard role mapping (love, gold, rose, pine, foam, iris).</li>
     <li><strong>Fonts:</strong> system UI sans for prose; JetBrains Mono / Fira Code / SF Mono / Menlo for code blocks.</li>
-    <li><strong>Validation:</strong> each cheatsheet was checked with Python's <code class="inline">html.parser</code> for unclosed tags.</li>
+    <li><strong>Validation:</strong> each cheatsheet was checked with Python's <code class="inline">html.parser</code> for unclosed tags. The ffmpeg/ffprobe cheatsheet's commands were additionally run against a real local ffmpeg build (Apple Silicon) rather than authored from memory — subtitle burn-in/<code class="inline">drawtext</code> (unsupported by this build), RTMP push/<code class="inline">fswatch</code> (no live endpoint or tool on hand), and NVENC/VAAPI (no matching GPU) are the exceptions, sourced from official docs and labeled documentation-only in that page.</li>
   </ul>
 
   <div class="note new">Looking for the JS event-loop deep-dives? They're in the <a class="inline-docs" href="event-loop-index.html">event-loop series index</a> — three sequential explainers on the call stack / microtask / macrotask interplay and migrating from <code class="inline">.then</code> chains to <code class="inline">await</code>.</div>
@@ -273,7 +328,8 @@
   Cheatsheets index · Rose Pine theme<br><br>
   <strong style="color:var(--gold)">Cheatsheets:</strong>
   <a href="typescript-cheatsheet.html">TypeScript</a> ·
-  <a href="curl-cheatsheet.html">curl</a>
+  <a href="curl-cheatsheet.html">curl</a> ·
+  <a href="ffmpeg-cheatsheet.html">ffmpeg / ffprobe</a>
   &nbsp;|&nbsp;
   <a href="event-loop-index.html">→ Event-loop series index</a>
 </footer>

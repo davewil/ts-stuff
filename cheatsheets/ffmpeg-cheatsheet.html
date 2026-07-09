@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ffmpeg / ffprobe — Comprehensive Cheatsheet</title>
+<script>(function(){try{var t=(JSON.parse(localStorage.getItem("docs-hub:tweaks")||"{}")||{}).theme;if(t==="moon"||t==="dawn"||t==="main"){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
+<link rel="stylesheet" href="styles.css?v=6">
+<style>
+  /* ffmpeg/ffprobe syntax token colors */
+  pre .cmd     { color: var(--pine); font-weight: 600; }
+  pre .flag    { color: var(--gold); }
+  pre .path    { color: var(--foam); }
+  pre .str     { color: var(--foam); }
+  pre .url     { color: var(--iris); }
+  pre .filter  { color: var(--iris); }
+  pre .var     { color: var(--rose); }
+  pre .comment { color: var(--muted); font-style: italic; }
+  pre .op      { color: var(--subtle); }
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to content</a>
+<nav class="back-link">
+  <a href="/">← All notes</a>
+  <div class="theme-switch" role="radiogroup" aria-label="Theme">
+    <button type="button" data-theme="main">Main</button>
+    <button type="button" data-theme="moon">Moon</button>
+    <button type="button" data-theme="dawn">Dawn</button>
+  </div>
+</nav>
+
+<header>
+  <h1>ffmpeg <span class="accent">/ ffprobe</span> cheatsheet</h1>
+  <p>Comprehensive reference for transcoding, filtering, streaming, and inspecting media — Rose Pine theme</p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#basics">Basics</a>
+  <a href="#codecs">Codecs & containers</a>
+  <a href="#quality">Transcoding & quality</a>
+  <a href="#resize">Resize & crop</a>
+  <a href="#trim">Trim & concatenate</a>
+  <a href="#filters">Filters & filter graphs</a>
+  <a href="#audio">Audio</a>
+  <a href="#subtitles">Subtitles</a>
+  <a href="#thumbnails">Thumbnails & GIFs</a>
+  <a href="#streaming">Streaming (HLS/DASH/RTMP)</a>
+  <a href="#hwaccel">Hardware acceleration</a>
+  <a href="#probe-basics">ffprobe basics</a>
+  <a href="#probe-json">ffprobe + JSON</a>
+  <a href="#batch">Batch & scripting</a>
+  <a href="#recipes">Real-world recipes</a>
+</nav>
+
+<main id="main">
+<div class="grid">
+
+<!-- BASICS -->
+<section class="card" id="basics">
+  <h2><span class="icon">▸</span> Basics</h2>
+
+  <h3>Simplest conversion</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">input.mov</span> <span class="path">output.mp4</span>  <span class="comment"># container + codec inferred from output extension</span></pre>
+
+  <h3>Overwrite / never-overwrite output</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-y</span> <span class="flag">-i</span> <span class="path">input.mov</span> <span class="path">output.mp4</span>  <span class="comment"># -y: always overwrite</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-n</span> <span class="flag">-i</span> <span class="path">input.mov</span> <span class="path">output.mp4</span>  <span class="comment"># -n: never overwrite, exit if it exists</span></pre>
+
+  <h3>Container vs. codec — the mental model</h3>
+  <div class="note"><strong>Key idea:</strong> the file extension (<code class="inline">.mp4</code>, <code class="inline">.mkv</code>, <code class="inline">.webm</code>) picks the <em>container</em> (a box format for streams + metadata); <code class="inline">-c:v</code>/<code class="inline">-c:a</code> pick the <em>codec</em> (how the bits inside are actually encoded). Most containers can hold several codecs — that's why "convert to mp4" is ambiguous until you also say which codec.</div>
+
+  <h3>Quiet / verbose output</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-v</span> <span class="str">quiet</span> <span class="flag">-stats</span> <span class="flag">-i</span> <span class="path">input.mp4</span> <span class="path">output.mp4</span>  <span class="comment"># silence banner, keep progress</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-hide_banner</span> <span class="flag">-i</span> <span class="path">input.mp4</span> <span class="path">output.mp4</span>       <span class="comment"># drop the build/config banner only</span></pre>
+
+  <h3>Multiple inputs</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">video.mp4</span> <span class="flag">-i</span> <span class="path">audio.aac</span> <span class="flag">-c</span> <span class="str">copy</span> <span class="path">muxed.mp4</span></pre>
+</section>
+
+<!-- CODECS & CONTAINERS -->
+<section class="card" id="codecs">
+  <h2><span class="icon">▸</span> Codecs &amp; containers</h2>
+
+  <h3>Pick a video / audio codec explicitly</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mov</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-c:a</span> <span class="str">aac</span> <span class="path">out.mp4</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mov</span> <span class="flag">-c:v</span> <span class="str">libvpx-vp9</span> <span class="flag">-c:a</span> <span class="str">libopus</span> <span class="path">out.webm</span></pre>
+
+  <h3>Stream copy — remux without re-encoding</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mkv</span> <span class="flag">-c</span> <span class="str">copy</span> <span class="path">out.mp4</span>  <span class="comment"># fast, lossless — only works if codecs are container-compatible</span></pre>
+  <div class="note"><strong>Tip:</strong> <code class="inline">-c copy</code> is near-instant because no pixels are decoded — it's just repackaging streams. It fails if the target container can't hold the source codec (e.g. some subtitle formats into <code class="inline">.mp4</code>).</div>
+
+  <h3>Common container / codec pairings</h3>
+  <table>
+    <tr><th>Container</th><th>Typical video</th><th>Typical audio</th></tr>
+    <tr><td><code>.mp4</code></td><td><code>h264</code>, <code>hevc</code></td><td><code>aac</code></td></tr>
+    <tr><td><code>.webm</code></td><td><code>vp9</code>, <code>av1</code></td><td><code>opus</code></td></tr>
+    <tr><td><code>.mkv</code></td><td>almost anything</td><td>almost anything</td></tr>
+    <tr><td><code>.mov</code></td><td><code>h264</code>, <code>prores</code></td><td><code>aac</code>, <code>pcm</code></td></tr>
+  </table>
+
+  <h3>List available encoders / decoders</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-encoders</span> <span class="op">|</span> grep <span class="str">264</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-decoders</span> <span class="op">|</span> grep <span class="str">vp9</span></pre>
+</section>
+
+<!-- TRANSCODING & QUALITY -->
+<section class="card" id="quality">
+  <h2><span class="icon">▸</span> Transcoding &amp; quality</h2>
+
+  <h3>Constant Rate Factor (CRF) — quality-targeted, variable bitrate</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-crf</span> <span class="str">23</span> <span class="flag">-preset</span> <span class="str">medium</span> <span class="path">out.mp4</span>
+<span class="comment"># CRF: 0 = lossless, 18 ≈ visually lossless, 23 = default, 51 = worst. Lower = bigger + better.</span></pre>
+
+  <h3>Encoder presets — speed vs. compression efficiency</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-preset</span> <span class="str">veryslow</span> <span class="flag">-crf</span> <span class="str">20</span> <span class="path">out.mp4</span>
+<span class="comment"># ultrafast → superfast → veryfast → faster → fast → medium → slow → slower → veryslow</span></pre>
+
+  <h3>Target bitrate (one-pass)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-b:v</span> <span class="str">2M</span> <span class="flag">-maxrate</span> <span class="str">2.5M</span> <span class="flag">-bufsize</span> <span class="str">4M</span> <span class="path">out.mp4</span></pre>
+
+  <h3>Two-pass encoding — best bitrate-targeted quality</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-y</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-b:v</span> <span class="str">2M</span> <span class="flag">-pass</span> <span class="str">1</span> <span class="flag">-an</span> <span class="flag">-f</span> <span class="str">null</span> <span class="path">/dev/null</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-b:v</span> <span class="str">2M</span> <span class="flag">-pass</span> <span class="str">2</span> <span class="flag">-c:a</span> <span class="str">aac</span> <span class="path">out.mp4</span>
+<span class="comment"># pass 1 writes ffmpeg2pass-0.log (stats only, no output file needed); pass 2 reads it</span></pre>
+
+  <div class="note"><strong>Which to use?</strong> CRF for "make it look good, size doesn't matter." Two-pass bitrate for "must fit in exactly N MB" (upload caps, fixed-size streaming targets).</div>
+</section>
+
+<!-- RESIZE & CROP -->
+<section class="card" id="resize">
+  <h2><span class="icon">▸</span> Resize &amp; crop</h2>
+
+  <h3>Scale to a fixed width, auto height</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">scale=1280:-2</span><span class="str">"</span> <span class="path">out.mp4</span>
+<span class="comment"># -2 keeps height even (required by most codecs); -1 doesn't guarantee that</span></pre>
+
+  <h3>Crop</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">crop=640:360:0:0</span><span class="str">"</span> <span class="path">out.mp4</span>
+<span class="comment"># crop=out_w:out_h:x:y — x,y is the top-left corner of the crop rectangle</span></pre>
+
+  <h3>Pad (letterbox / add borders)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2</span><span class="str">"</span> <span class="path">out.mp4</span>
+<span class="comment"># scale-to-fit then pad to exact target size, centered</span></pre>
+
+  <h3>Rotate / flip</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">transpose=1</span><span class="str">"</span> <span class="path">out.mp4</span>  <span class="comment"># 90° clockwise; 0=CCW, 2=CCW+flip, 3=CW+flip</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">hflip</span><span class="str">"</span>    <span class="path">out.mp4</span></pre>
+</section>
+
+<!-- TRIM & CONCATENATE -->
+<section class="card" id="trim">
+  <h2><span class="icon">▸</span> Trim &amp; concatenate</h2>
+
+  <h3>Fast trim (input seek — before <code class="inline">-i</code>)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-ss</span> <span class="str">00:00:10</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-t</span> <span class="str">30</span> <span class="flag">-c</span> <span class="str">copy</span> <span class="path">out.mp4</span>
+<span class="comment"># -ss before -i seeks the demuxer directly — fast, but may snap to the nearest keyframe with -c copy</span></pre>
+
+  <h3>Accurate trim (output seek — after <code class="inline">-i</code>)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-ss</span> <span class="str">00:00:10</span> <span class="flag">-t</span> <span class="str">30</span> <span class="path">out.mp4</span>
+<span class="comment"># -ss after -i decodes from the start and seeks precisely — slower, frame-accurate, requires re-encode</span></pre>
+
+  <h3><code class="inline">-to</code> vs. <code class="inline">-t</code></h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-ss</span> <span class="str">10</span> <span class="flag">-to</span> <span class="str">40</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="path">out.mp4</span>  <span class="comment"># -to is an absolute timestamp in the source</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-ss</span> <span class="str">10</span> <span class="flag">-t</span>  <span class="str">30</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="path">out.mp4</span>  <span class="comment"># -t is a duration relative to -ss</span></pre>
+
+  <h3>Concatenate — same codec/container (concat demuxer)</h3>
+<pre><span class="comment"># list.txt:</span>
+<span class="filter">file</span> <span class="str">'part1.mp4'</span>
+<span class="filter">file</span> <span class="str">'part2.mp4'</span>
+<span class="filter">file</span> <span class="str">'part3.mp4'</span>
+
+<span class="cmd">ffmpeg</span> <span class="flag">-f</span> <span class="str">concat</span> <span class="flag">-safe</span> <span class="str">0</span> <span class="flag">-i</span> <span class="path">list.txt</span> <span class="flag">-c</span> <span class="str">copy</span> <span class="path">joined.mp4</span>
+<span class="comment"># -safe 0 allows absolute/relative paths outside the list file's directory</span></pre>
+
+  <h3>Concatenate — different codecs (concat filter, re-encodes)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">part1.mp4</span> <span class="flag">-i</span> <span class="path">part2.mp4</span> \
+     <span class="flag">-filter_complex</span> <span class="str">"</span><span class="filter">[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]</span><span class="str">"</span> \
+     <span class="flag">-map</span> <span class="str">"[v]"</span> <span class="flag">-map</span> <span class="str">"[a]"</span> <span class="path">joined.mp4</span></pre>
+</section>
+
+<!-- FILTERS & FILTER GRAPHS -->
+<section class="card" id="filters">
+  <h2><span class="icon">▸</span> Filters &amp; filter graphs</h2>
+
+  <h3>Simple filter chains — <code class="inline">-vf</code> / <code class="inline">-af</code></h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">scale=1280:-2,eq=brightness=0.05</span><span class="str">"</span> <span class="path">out.mp4</span>
+<span class="comment"># comma chains filters left-to-right through a single linear stream</span></pre>
+
+  <h3>Filter graphs — <code class="inline">-filter_complex</code></h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-filter_complex</span> <span class="str">"</span><span class="filter">split[s0][s1];[s0]scale=640:-2[small];[s1]scale=1920:-2[large]</span><span class="str">"</span> \
+     <span class="flag">-map</span> <span class="str">"[small]"</span> <span class="path">small.mp4</span> <span class="flag">-map</span> <span class="str">"[large]"</span> <span class="path">large.mp4</span>
+<span class="comment"># needed whenever a graph has multiple inputs/outputs or branches — -vf can't express that</span></pre>
+
+  <h3>Labeled nodes &amp; semicolons</h3>
+  <div class="note"><strong>Reading a graph:</strong> <code class="inline">;</code> separates independent chains, <code class="inline">,</code> chains filters in sequence, <code class="inline">[label]</code> names a pad so a later chain can consume it. <code class="inline">split[s0][s1]</code> duplicates one input into two labeled outputs.</div>
+
+  <h3>Overlay (picture-in-picture / watermark)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">main.mp4</span> <span class="flag">-i</span> <span class="path">logo.png</span> \
+     <span class="flag">-filter_complex</span> <span class="str">"</span><span class="filter">overlay=W-w-10:H-h-10</span><span class="str">"</span> <span class="path">out.mp4</span>
+<span class="comment"># W/H = main video size, w/h = overlay size — bottom-right corner with 10px margin</span></pre>
+
+  <h3>Drawtext (burn in a timestamp / label)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">drawtext=text='%{pts\\:hms}':x=10:y=10:fontsize=24:fontcolor=white</span><span class="str">"</span> <span class="path">out.mp4</span>
+<span class="comment"># requires libfreetype — not compiled into every build; not run locally, syntax from ffmpeg.org's drawtext docs</span></pre>
+</section>
+
+<!-- AUDIO -->
+<section class="card" id="audio">
+  <h2><span class="icon">▸</span> Audio</h2>
+
+  <h3>Extract audio only</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vn</span> <span class="flag">-c:a</span> <span class="str">copy</span> <span class="path">audio.aac</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vn</span> <span class="flag">-c:a</span> <span class="str">libmp3lame</span> <span class="flag">-q:a</span> <span class="str">2</span> <span class="path">audio.mp3</span></pre>
+
+  <h3>Replace / mux in a different audio track</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">video.mp4</span> <span class="flag">-i</span> <span class="path">new_audio.aac</span> \
+     <span class="flag">-map</span> <span class="str">0:v</span> <span class="flag">-map</span> <span class="str">1:a</span> <span class="flag">-c:v</span> <span class="str">copy</span> <span class="flag">-c:a</span> <span class="str">copy</span> <span class="flag">-shortest</span> <span class="path">out.mp4</span>
+<span class="comment"># -shortest stops output at the shorter of the two streams</span></pre>
+
+  <h3>Loudness normalization — <code class="inline">loudnorm</code> (EBU R128)</h3>
+<pre><span class="comment"># pass 1: measure</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-af</span> <span class="str">"</span><span class="filter">loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json</span><span class="str">"</span> <span class="flag">-f</span> <span class="str">null</span> -
+<span class="comment"># reads back measured_I / measured_TP / measured_LRA / measured_thresh from the JSON it prints</span>
+
+<span class="comment"># pass 2: apply, feeding the measured_* values back in</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> \
+     <span class="flag">-af</span> <span class="str">"</span><span class="filter">loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-21.8:measured_TP=-17.7:measured_LRA=0.1:measured_thresh=-31.8:linear=true</span><span class="str">"</span> \
+     <span class="path">out.mp4</span></pre>
+  <div class="note"><strong>Why two passes:</strong> single-pass <code class="inline">loudnorm</code> normalizes dynamically as it goes and can drift; feeding the first pass's measured values back in as a second pass produces a linear, more accurate correction.</div>
+
+  <h3>Resample / remap channels</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.wav</span> <span class="flag">-ar</span> <span class="str">48000</span> <span class="flag">-ac</span> <span class="str">2</span> <span class="path">out.wav</span>  <span class="comment"># -ar sample rate, -ac channel count</span></pre>
+</section>
+
+<!-- SUBTITLES -->
+<section class="card" id="subtitles">
+  <h2><span class="icon">▸</span> Subtitles</h2>
+
+  <div class="note"><strong>Not run locally:</strong> this build lacks <code class="inline">libass</code>, so <code class="inline">subtitles</code> below is documentation-only — syntax sourced from ffmpeg.org's filters reference, not executed. (<code class="inline">drawtext</code>, covered in the Filters section above, has the same caveat for its own reason — missing <code class="inline">libfreetype</code>.) Everything else on this page was run against a real file.</div>
+
+  <h3>Burn in (hardcode into the picture)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">subtitles=movie.srt</span><span class="str">"</span> <span class="path">out.mp4</span>
+<span class="comment"># irreversible — viewers can't turn it off. Watch path escaping on Windows (colons in drive letters).</span></pre>
+
+  <h3>Soft-mux (selectable track, no re-encode of video)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-i</span> <span class="path">subs.srt</span> \
+     <span class="flag">-map</span> <span class="str">0</span> <span class="flag">-map</span> <span class="str">1</span> <span class="flag">-c</span> <span class="str">copy</span> <span class="flag">-c:s</span> <span class="str">mov_text</span> <span class="path">out.mp4</span>
+<span class="comment"># .mp4/.mov need the mov_text subtitle codec; .mkv accepts srt/ass natively with -c:s copy</span></pre>
+
+  <h3>Extract a subtitle track</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mkv</span> <span class="flag">-map</span> <span class="str">0:s:0</span> <span class="path">out.srt</span></pre>
+</section>
+
+<!-- THUMBNAILS & GIFS -->
+<section class="card" id="thumbnails">
+  <h2><span class="icon">▸</span> Thumbnails &amp; GIFs</h2>
+
+  <h3>Single-frame thumbnail</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-ss</span> <span class="str">00:00:05</span> <span class="flag">-frames:v</span> <span class="str">1</span> <span class="path">thumb.jpg</span></pre>
+
+  <h3>Frames at a fixed interval</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">fps=1</span><span class="str">"</span> <span class="path">frame_%03d.jpg</span>  <span class="comment"># one frame per second</span></pre>
+
+  <h3>High-quality GIF — two-pass palette</h3>
+<pre><span class="comment"># two commands (writes an intermediate palette.png):</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">fps=15,scale=480:-1:flags=lanczos,palettegen</span><span class="str">"</span> <span class="path">palette.png</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-i</span> <span class="path">palette.png</span> <span class="flag">-lavfi</span> <span class="str">"</span><span class="filter">fps=15,scale=480:-1:flags=lanczos[x];[x][1:v]paletteuse</span><span class="str">"</span> <span class="path">out.gif</span>
+
+<span class="comment"># one command, same result, via filter_complex + split:</span>
+<span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> \
+     <span class="flag">-filter_complex</span> <span class="str">"</span><span class="filter">fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse</span><span class="str">"</span> \
+     <span class="path">out.gif</span></pre>
+  <div class="note"><strong>Why not just <code class="inline">ffmpeg -i in.mp4 out.gif</code>?</strong> Direct GIF encoding quantizes to a fixed generic 256-color palette per frame and looks noticeably banded. <code class="inline">palettegen</code>/<code class="inline">paletteuse</code> derives one optimized palette for the whole clip first.</div>
+</section>
+
+<!-- STREAMING -->
+<section class="card" id="streaming">
+  <h2><span class="icon">▸</span> Streaming (HLS / DASH / RTMP)</h2>
+
+  <h3>Segment into an HLS playlist</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-c:a</span> <span class="str">aac</span> \
+     <span class="flag">-hls_time</span> <span class="str">6</span> <span class="flag">-hls_list_size</span> <span class="str">0</span> \
+     <span class="flag">-hls_segment_filename</span> <span class="str">"segment_%03d.ts"</span> <span class="path">index.m3u8</span>
+<span class="comment"># -hls_time: target segment length (sec); -hls_list_size 0: keep every segment in the playlist (VOD, not live)</span></pre>
+
+  <h3>Segment into DASH</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-c:a</span> <span class="str">aac</span> \
+     <span class="flag">-f</span> <span class="str">dash</span> <span class="path">manifest.mpd</span></pre>
+
+  <h3>Push to an RTMP endpoint (live streaming)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-re</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-preset</span> <span class="str">veryfast</span> <span class="flag">-c:a</span> <span class="str">aac</span> \
+     <span class="flag">-f</span> <span class="str">flv</span> <span class="url">rtmp://live.example.com/app/stream_key</span>
+<span class="comment"># -re: read input at native frame rate instead of as fast as possible — required for live push</span></pre>
+  <div class="note"><strong>Not run:</strong> this needs a live RTMP endpoint to push to — no server was on hand to test against. HLS and DASH above were both verified by actually segmenting a file.</div>
+</section>
+
+<!-- HARDWARE ACCELERATION -->
+<section class="card" id="hwaccel">
+  <h2><span class="icon">▸</span> Hardware acceleration</h2>
+
+  <div class="note"><strong>Verified on:</strong> VideoToolbox commands below were run on Apple Silicon for this cheatsheet. NVENC and VAAPI are <strong>documentation-only</strong> — sourced from NVIDIA's and ffmpeg.org's official docs, not executed (this machine has neither an Nvidia GPU nor a VAAPI-capable Linux/Intel setup).</div>
+
+  <h3>VideoToolbox (macOS)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-c:v</span> <span class="str">h264_videotoolbox</span> <span class="flag">-b:v</span> <span class="str">1M</span> <span class="path">out.mp4</span></pre>
+
+  <h3>NVENC (Nvidia)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-vsync</span> <span class="str">0</span> <span class="flag">-hwaccel</span> <span class="str">cuda</span> <span class="flag">-hwaccel_output_format</span> <span class="str">cuda</span> <span class="flag">-i</span> <span class="path">in.mp4</span> \
+     <span class="flag">-c:v</span> <span class="str">h264_nvenc</span> <span class="flag">-b:v</span> <span class="str">5M</span> <span class="flag">-c:a</span> <span class="str">copy</span> <span class="path">out.mp4</span></pre>
+
+  <h3>VAAPI (Linux / Intel &amp; AMD)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-init_hw_device</span> <span class="str">vaapi=hw:/dev/dri/renderD128</span> <span class="flag">-i</span> <span class="path">in.mp4</span> \
+     <span class="flag">-vf</span> <span class="str">"</span><span class="filter">format=nv12,hwupload</span><span class="str">"</span> <span class="flag">-c:v</span> <span class="str">h264_vaapi</span> <span class="flag">-qp</span> <span class="str">25</span> <span class="path">out.mp4</span></pre>
+
+  <h3>List available hwaccels on this build</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-hwaccels</span></pre>
+</section>
+
+<!-- FFPROBE BASICS -->
+<section class="card" id="probe-basics">
+  <h2><span class="icon">▸</span> ffprobe basics</h2>
+
+  <h3>Full stream + format dump</h3>
+<pre><span class="cmd">ffprobe</span> <span class="flag">-v</span> <span class="str">error</span> <span class="flag">-show_format</span> <span class="flag">-show_streams</span> <span class="path">in.mp4</span></pre>
+
+  <h3>Just the fields you want</h3>
+<pre><span class="cmd">ffprobe</span> <span class="flag">-v</span> <span class="str">error</span> \
+     <span class="flag">-show_entries</span> <span class="str">stream=codec_type,codec_name,width,height</span> \
+     <span class="flag">-of</span> <span class="str">default=noprint_wrappers=1</span> <span class="path">in.mp4</span></pre>
+
+  <h3>Duration only</h3>
+<pre><span class="cmd">ffprobe</span> <span class="flag">-v</span> <span class="str">error</span> <span class="flag">-show_entries</span> <span class="str">format=duration</span> <span class="flag">-of</span> <span class="str">csv=p=0</span> <span class="path">in.mp4</span></pre>
+
+  <h3><code class="inline">-v error</code> vs. default verbosity</h3>
+  <div class="note"><strong>Always add <code class="inline">-v error</code></strong> when scripting against ffprobe output — the default log level otherwise mixes informational banner text into stdout/stderr and breaks naive parsing.</div>
+</section>
+
+<!-- FFPROBE + JSON -->
+<section class="card" id="probe-json">
+  <h2><span class="icon">▸</span> ffprobe + JSON</h2>
+
+  <h3>Structured output for scripting</h3>
+<pre><span class="cmd">ffprobe</span> <span class="flag">-v</span> <span class="str">error</span> <span class="flag">-of</span> <span class="str">json</span> \
+     <span class="flag">-show_entries</span> <span class="str">"format=duration:stream=width,height,codec_name"</span> \
+     <span class="path">in.mp4</span></pre>
+
+  <h3>Pipe into <code class="inline">jq</code></h3>
+<pre><span class="cmd">ffprobe</span> <span class="flag">-v</span> <span class="str">error</span> <span class="flag">-of</span> <span class="str">json</span> <span class="flag">-show_entries</span> <span class="str">format=duration</span> <span class="path">in.mp4</span> <span class="op">|</span> jq <span class="str">-r</span> <span class="str">.format.duration</span></pre>
+
+  <h3>Resolution as a single string</h3>
+<pre><span class="var">RES</span><span class="op">=</span><span class="str">$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 in.mp4)</span>
+<span class="cmd">echo</span> <span class="str">"$RES"</span>  <span class="comment"># → 1920x1080</span></pre>
+
+  <h3>Codec name only</h3>
+<pre><span class="cmd">ffprobe</span> <span class="flag">-v</span> <span class="str">error</span> <span class="flag">-select_streams</span> <span class="str">v:0</span> <span class="flag">-show_entries</span> <span class="str">stream=codec_name</span> <span class="flag">-of</span> <span class="str">csv=p=0</span> <span class="path">in.mp4</span></pre>
+</section>
+
+<!-- BATCH & SCRIPTING -->
+<section class="card" id="batch">
+  <h2><span class="icon">▸</span> Batch &amp; scripting</h2>
+
+  <h3>Convert every file in a directory</h3>
+<pre><span class="cmd">for</span> f <span class="cmd">in</span> <span class="op">*</span>.mov<span class="comment">; do</span>
+  <span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="str">"$f"</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-crf</span> <span class="str">23</span> <span class="str">"${f%.mov}.mp4"</span>
+<span class="cmd">done</span></pre>
+
+  <h3>Parallel batch with <code class="inline">xargs</code></h3>
+<pre><span class="cmd">ls</span> <span class="op">*</span>.mov <span class="op">|</span> xargs <span class="flag">-P</span> <span class="str">4</span> <span class="flag">-I{}</span> ffmpeg <span class="flag">-i</span> <span class="str">{}</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-crf</span> <span class="str">23</span> <span class="str">{}.mp4</span>
+<span class="comment"># -P 4: four ffmpeg processes at once — tune to core count / thermal headroom</span></pre>
+
+  <h3>Watch-folder pattern</h3>
+<pre><span class="cmd">fswatch</span> <span class="flag">-0</span> <span class="path">./incoming</span> <span class="op">|</span> <span class="cmd">while</span> read <span class="flag">-d</span> <span class="str">""</span> f<span class="comment">; do</span>
+  <span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="str">"$f"</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="str">"./done/$(basename "$f").mp4"</span>
+<span class="cmd">done</span>
+<span class="comment"># fswatch (macOS/Linux) triggers on new files; swap for inotifywait on Linux-only boxes</span></pre>
+  <div class="note"><strong>Not run:</strong> <code class="inline">fswatch</code> isn't installed on the machine this was written on — the ffmpeg invocation inside the loop uses the same transcode pattern verified elsewhere on this page, but the loop itself wasn't executed.</div>
+</section>
+
+<!-- RECIPES -->
+<section class="card" id="recipes">
+  <h2><span class="icon">▸</span> Real-world recipes</h2>
+
+  <h3>Compress for Slack / email attachment limits</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mov</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">scale=1280:-2</span><span class="str">"</span> <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-crf</span> <span class="str">28</span> <span class="flag">-preset</span> <span class="str">fast</span> \
+     <span class="flag">-c:a</span> <span class="str">aac</span> <span class="flag">-b:a</span> <span class="str">96k</span> <span class="path">compressed.mp4</span></pre>
+
+  <h3>Screen recording → shareable mp4</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">screen_recording.mov</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">fps=30,scale=1920:-2</span><span class="str">"</span> \
+     <span class="flag">-c:v</span> <span class="str">libx264</span> <span class="flag">-crf</span> <span class="str">20</span> <span class="flag">-pix_fmt</span> <span class="str">yuv420p</span> <span class="path">shareable.mp4</span>
+<span class="comment"># -pix_fmt yuv420p: some source formats (e.g. ProRes) default to a pixel format QuickTime/most players can't read</span></pre>
+
+  <h3>Contact-sheet montage from stills</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-vf</span> <span class="str">"</span><span class="filter">select='not(mod(n\\,150))',scale=320:-1,tile=4x4</span><span class="str">"</span> <span class="flag">-frames:v</span> <span class="str">1</span> <span class="path">contact_sheet.jpg</span>
+<span class="comment"># samples every 150th frame, tiles 16 of them into a 4×4 grid</span></pre>
+
+  <h3>Health-check a media file in a script</h3>
+<pre><span class="var">dur</span><span class="op">=</span><span class="str">$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$1" 2>/dev/null)</span>
+<span class="cmd">if</span> <span class="op">[</span> <span class="flag">-z</span> <span class="str">"$dur"</span> <span class="op">]</span><span class="comment">; then</span>
+  <span class="cmd">echo</span> <span class="str">"unreadable or corrupt: $1"</span> <span class="op">&gt;&amp;2</span>
+  <span class="cmd">exit</span> <span class="str">1</span>
+<span class="cmd">fi</span></pre>
+
+  <h3>Strip audio entirely (mute a clip)</h3>
+<pre><span class="cmd">ffmpeg</span> <span class="flag">-i</span> <span class="path">in.mp4</span> <span class="flag">-an</span> <span class="flag">-c:v</span> <span class="str">copy</span> <span class="path">muted.mp4</span></pre>
+</section>
+
+</div>
+</main>
+
+<footer>
+  ffmpeg / ffprobe cheatsheet · Rose Pine theme · palette from <a href="https://rosepinetheme.com">rosepinetheme.com</a> · FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project · <code class="inline">man ffmpeg</code> / <code class="inline">man ffprobe</code> are the authoritative references
+</footer>
+
+<script src="wallpaper-engine.js?v=4"></script>
+<script src="app.js?v=4"></script>
+<script src="tweaks.js?v=4"></script>
+
+</body>
+</html>
