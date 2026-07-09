@@ -107,3 +107,35 @@ calls out.
   drawer, syntax-token color legibility
 - Confirm docs-hub renders the new `media-tools` domain card and `ffmpeg` topic
   entry correctly
+
+## Advisor review findings (addressed pre-plan)
+
+- **C3 a11y defect scope decision**: the theme-switch nav being cloned from
+  `curl-cheatsheet.html:24-28` carries the known C3 bug (`role="radiogroup"`
+  wrapping plain `<button>`s, no `role="radio"`/`aria-checked`/arrow-key nav).
+  Decision: **copy the pattern as-is** for parity with the TS/curl pages, and
+  add a line to `A11Y_FOLLOWUPS.md`'s C3 entry noting `ffmpeg-cheatsheet.html`
+  now also carries the defect. C3 gets fixed once, site-wide (in shared
+  `tweaks.js`), as separate future work — not expanded into this task.
+- **Command correctness is the real risk, not structure.** ffmpeg has plenty
+  of plausible-but-wrong syntax (concat demuxer flags, two-pass palette GIF,
+  `loudnorm` two-pass, input-vs-output `-ss` seek). Every command in every
+  section must be grounded in ffmpeg.org docs or actually run — not authored
+  from memory, per the repo's "never make things up" rule. The dev machine is
+  Apple Silicon: VideoToolbox (§11) can be tested directly; NVENC and VAAPI
+  cannot, and must be marked docs-only/untested rather than implied-verified.
+  The implementation plan should include a per-section verification checklist,
+  not just architectural steps.
+- **Pre-check: docs-hub domain rendering is fully data-driven** — confirmed via
+  grep of `app.jsx`/`views.jsx`: every domain reference maps over
+  `window.DOMAINS` (`.map`, `.find`, `.forEach`), no hardcoded domain count or
+  list. The two-entry `data.js` addition (Part 3) is sufficient on its own.
+- **Pre-check: `styles.css?v=` cache-bust version.** `index.html` is at `v=6`;
+  every existing cheatsheet page (`curl-cheatsheet.html`, `typescript-cheatsheet.html`,
+  the event-loop pages) is still pinned at the stale `v=4` left over from
+  before the a11y CSS pass (`2296850`). This isn't a content bug — the query
+  string doesn't gate which rules are in the file, only client cache
+  freshness — but the new page should link `styles.css?v=6` (current, matching
+  `index.html`) rather than copying the stale `v=4`. The other pages' stale
+  pins are a pre-existing, out-of-scope inconsistency — noted here, not
+  silently fixed as a drive-by.
