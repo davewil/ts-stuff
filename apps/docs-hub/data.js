@@ -305,6 +305,24 @@ window.TOPICS = [
     ],
     tags: ["devops", "supply-chain"]
   },
+  {
+    id: "delivery-principles",
+    domain: "cloud-native",
+    title: "Production Delivery Principles",
+    ext: "md",
+    description: "Shift-left CI, expand/contract migrations, feature-flag lifecycle, test isolation — lessons from running a real production system.",
+    status: "reference",
+    updated: "2026-07",
+    href: "cheatsheets/production-delivery-principles.html",
+    subLinks: [
+      { label: "Production delivery principles guide", href: "cheatsheets/production-delivery-principles.html" }
+    ],
+    external: [
+      { label: "Trunk-based development", href: "https://trunkbaseddevelopment.com/" },
+      { label: "Feature flags (Martin Fowler)", href: "https://martinfowler.com/articles/feature-toggles.html" }
+    ],
+    tags: ["ci-cd", "migrations", "feature-flags"]
+  },
 
   // ─── Homelab ────────────────────────────────────────────────
   {
@@ -380,6 +398,25 @@ window.TOPICS = [
       { label: "Authentik", href: "https://goauthentik.io/" }
     ],
     tags: ["self-hosted", "gitops", "k8s"]
+  },
+  {
+    id: "caddy-docker-proxy",
+    domain: "homelab",
+    title: "Caddy Docker Proxy",
+    ext: "conf",
+    description: "Label-driven reverse proxy — no shared Caddyfile, no per-repo config fights. Zero-downtime multi-app cutover.",
+    status: "reference",
+    updated: "2026-07",
+    href: "cheatsheets/caddy-docker-proxy-cheatsheet.html",
+    subLinks: [
+      { label: "Caddy Docker Proxy cheatsheet (15 sections)", href: "cheatsheets/caddy-docker-proxy-cheatsheet.html" }
+    ],
+    external: [
+      { label: "caddy-docker-proxy", href: "https://github.com/lucaslorentz/caddy-docker-proxy" },
+      { label: "Caddy docs", href: "https://caddyserver.com/docs/" },
+      { label: "xcaddy", href: "https://github.com/caddyserver/xcaddy" }
+    ],
+    tags: ["reverse-proxy", "docker", "tls"]
   },
 
   // ─── Media / CLI Tools ──────────────────────────────────────

@@ -4,25 +4,26 @@ Date: 2026-07-09
 
 ## Goal
 
-Mine real patterns from deployed projects (this docs site, `homelab-infra`,
-`slackex`) and turn them into two new docs-site guides: a Caddy-docker-proxy
-reverse-proxy cheatsheet (Homelab domain) and a production-delivery-principles
-guide (Cloud Native domain).
+Mine real patterns from deployed projects (this docs site, a personal
+infra-as-code repo, and a self-hosted Phoenix/LiveView app) and turn them into
+two new docs-site guides: a Caddy-docker-proxy reverse-proxy cheatsheet
+(Homelab domain) and a production-delivery-principles guide (Cloud Native
+domain).
 
 ## Source material
 
-- `~/dev/elixir/slackex` — production Phoenix/LiveView app, self-hosted homelab
-  deploy. Read: `docs/runbooks/deployment.md`, `docs/engineering-principles.md`,
-  `docs/2026-03-10-caddy-docker-proxy-migration-design.md`,
-  `infra/caddy/{Dockerfile,docker-compose.yml,Caddyfile}`,
-  `docker-compose.prod.yml`, `scripts/caddy-cutover`.
-- `~/dev/homelab-infra` — infra-as-code repo (Vaultwarden service, disaster
-  recovery runbook, secret-sync scripts). Read for context; not directly
-  sourced into either guide this round (Vaultwarden/secrets is a separate,
-  deferred guide — see Deferred below).
+- A production Phoenix/LiveView app, self-hosted on a personal homelab Docker
+  host. Read: its deployment runbook, engineering-principles doc, a Caddy
+  migration design doc, the Caddy `Dockerfile`/`docker-compose.yml`/`Caddyfile`,
+  the app's own `docker-compose.prod.yml`, and its zero-downtime cutover
+  script.
+- A personal infra-as-code repo (Vaultwarden service, disaster recovery
+  runbook, secret-sync scripts). Read for context; not directly sourced into
+  either guide this round (Vaultwarden/secrets is a separate, deferred guide —
+  see Deferred below).
 - This repo's own `CLAUDE.md` homelab section (Proxmox/Docker host/Caddy/DNS
   topology) — corroborating source for the Tailscale-DNS-breaks-on-reboot
-  pattern, independently hit in three repos.
+  pattern, independently hit across the source projects.
 
 ## Decisions
 
@@ -33,10 +34,10 @@ guide (Cloud Native domain).
 - **Genericize hostnames and org names.** Every existing cheatsheet on this
   site (curl, TypeScript, ffmpeg) uses `example.com`-style placeholders, never
   real infrastructure. The Caddy guide follows the same convention — real
-  config shapes, label syntax, and gotchas stay accurate; hostnames
-  (`chat.davewil.dev` → `app.example.com`), the GHCR image path
-  (`ghcr.io/d-j-will/slackex` → `ghcr.io/you/yourapp`), and host aliases
-  (`tono`) are replaced with generic equivalents.
+  config shapes, label syntax, and gotchas stay accurate; real hostnames, the
+  real GHCR image path, and real host aliases are all replaced with generic
+  equivalents (`app.example.com`, `ghcr.io/you/yourapp`, `host`) — this spec
+  itself withholds the real values for the same reason.
 - **Format split matches the site's existing `ext` convention**: Caddy guide
   is `ext: "conf"` (dense, command/label-reference cheatsheet, same shell as
   curl/ffmpeg); principles guide is `ext: "md"` (narrative, lighter on code,
@@ -127,7 +128,7 @@ Cloud Native domain gains a 4th topic:
 - **Tailscale operational patterns guide** (DNS-resolver-breaks-on-reboot fix,
   subnet routing, tailnet-gated CI) — would fill the existing Tailscale stub.
 - **Secrets management / Vaultwarden guide** — would fill the existing Private
-  Cloud Stack stub, sourced from `homelab-infra`.
+  Cloud Stack stub, sourced from the personal infra-as-code repo above.
 - **Proxmox resilience & HA guide** — would fill the existing Proxmox VE stub.
 
 Each is real, sourced material already identified during this session's

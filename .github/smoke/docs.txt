@@ -8,6 +8,8 @@ event-loop-index.html
 typescript-cheatsheet.html
 curl-cheatsheet.html
 ffmpeg-cheatsheet.html
+caddy-docker-proxy-cheatsheet.html
+production-delivery-principles.html
 js-q-explainer.html
 js-q-2-explainer.html
 await-explainer.html

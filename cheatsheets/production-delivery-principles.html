@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Production Delivery Principles — Comprehensive Guide</title>
+<script>(function(){try{var t=(JSON.parse(localStorage.getItem("docs-hub:tweaks")||"{}")||{}).theme;if(t==="moon"||t==="dawn"||t==="main"){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
+<link rel="stylesheet" href="styles.css?v=6">
+<style>
+  /* principles-guide syntax token colors */
+  pre .cmd     { color: var(--foam); font-weight: 600; }
+  pre .flag    { color: var(--gold); }
+  pre .str     { color: var(--rose); }
+  pre .comment { color: var(--muted); font-style: italic; }
+  pre .op      { color: var(--subtle); }
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to content</a>
+<nav class="back-link">
+  <a href="/">← All notes</a>
+  <div class="theme-switch" role="radiogroup" aria-label="Theme">
+    <button type="button" data-theme="main">Main</button>
+    <button type="button" data-theme="moon">Moon</button>
+    <button type="button" data-theme="dawn">Dawn</button>
+  </div>
+</nav>
+
+<header>
+  <h1>Production Delivery <span class="accent">Principles</span></h1>
+  <p>Lessons from running a real production system, enshrined in tooling rather than just documentation — Rose Pine theme</p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#shift-left">Shift-left</a>
+  <a href="#pre-deploy">Pre-deploy checklist</a>
+  <a href="#expand-contract">Expand/contract migrations</a>
+  <a href="#feature-flags">Feature-flag lifecycle</a>
+  <a href="#test-isolation">Test isolation</a>
+  <a href="#root-cause">Root cause, not workarounds</a>
+  <a href="#summary">Summary checklist</a>
+</nav>
+
+<main id="main">
+<div class="grid">
+
+<!-- SHIFT LEFT -->
+<section class="card" id="shift-left">
+  <h2><span class="icon">▸</span> Shift-left: never break production</h2>
+
+  <p><strong>Every change must be proven safe before it reaches production.</strong> "It works on my machine" is not evidence. "CI passed" is necessary but not sufficient — CI catching something a local hook missed is itself a gap, not a success.</p>
+
+  <h3>The principle</h3>
+  <p>Nothing that can break the production build, test suite, or deployment should be catchable <em>only</em> in CI. Every failure class CI checks for needs a local equivalent that catches it before <code class="inline">git push</code> — otherwise the feedback loop is minutes-to-hours instead of seconds.</p>
+
+  <h3>How it's enforced, not just documented</h3>
+  <ul>
+    <li>A pre-commit hook runs the same checks as CI: formatting, tests, linting, YAML validation.</li>
+    <li>A pre-deploy script verifies the <em>full</em> production surface — not just "tests pass," but Docker build, release boot, infra config validity.</li>
+    <li>When CI catches something the hook missed, the tooling gap gets fixed <em>first</em>, then the bug — otherwise the same class of failure recurs.</li>
+    <li>When a new CI check is added, its local equivalent lands in the same commit. A CI-only check is a check that only fires after the round-trip cost has already been paid.</li>
+  </ul>
+
+  <div class="note"><strong>Why this is worth automating rather than trusting discipline:</strong> the entire value of shift-left is proportional to how fast the loop closes. A rule that lives only in a README gets skipped under deadline pressure; a rule a hook enforces doesn't need anyone to remember it.</div>
+</section>
+
+<!-- PRE-DEPLOY -->
+<section class="card" id="pre-deploy">
+  <h2><span class="icon">▸</span> Pre-deploy verification checklist</h2>
+
+  <p>Tests passing is necessary but not sufficient before a deploy. The full checklist, automated as a single script rather than a manual list to remember:</p>
+
+  <ol>
+    <li>Tests pass with zero failures</li>
+    <li>Formatting, linting, static analysis clean</li>
+    <li>The production Docker image actually builds</li>
+    <li>The built image actually <em>boots</em> and runs a basic sanity command — a build that succeeds but produces a container that crash-loops on start is a build success and a deploy failure</li>
+    <li>Infrastructure config (YAML, Dockerfiles, compose files) validates</li>
+    <li>If clustering/distribution changed, verify nodes actually discover each other post-deploy — not just that each node individually boots</li>
+  </ol>
+
+  <div class="note"><strong>Two things a green test suite doesn't prove:</strong> that the artifact you're about to ship builds and boots, and that a distributed system's nodes can still find each other after the topology changes. Both need their own explicit check.</div>
+</section>
+
+<!-- EXPAND/CONTRACT -->
+<section class="card" id="expand-contract">
+  <h2><span class="icon">▸</span> Expand / contract migrations</h2>
+
+  <p><strong>The running application must never break during a deploy.</strong> Old code must keep working against the new schema; new code must keep working against the old schema, for the whole rollout window between old and new instances being live simultaneously.</p>
+
+  <table>
+    <tr><th>Expand phase (deploy N)</th><th>Contract phase (deploy N+1 or later)</th></tr>
+    <tr><td>Add columns as nullable (or with a default)</td><td>Remove old columns/tables — only once no running code references them</td></tr>
+    <tr><td>Add new tables freely</td><td>Add <code class="inline">NOT NULL</code> — only after a backfill</td></tr>
+    <tr><td>Add indexes concurrently</td><td>Drop unused indexes</td></tr>
+    <tr><td>Keep old columns/tables in place</td><td>—</td></tr>
+  </table>
+
+  <div class="note danger"><strong>Never in a single migration:</strong> rename a column or table; change a column's type; add a <code class="inline">NOT NULL</code> column with no default; drop a column still referenced by code that's currently deployed. Each of these breaks the "old code, new schema / new code, old schema" invariant for the duration of a rolling deploy.</div>
+</section>
+
+<!-- FEATURE FLAGS -->
+<section class="card" id="feature-flags">
+  <h2><span class="icon">▸</span> Feature-flag lifecycle</h2>
+
+  <p>Every new user-facing feature deploys behind a flag, off by default. The lifecycle has five stages:</p>
+
+  <ol>
+    <li><strong>Develop</strong> behind a flag check (e.g. <code class="inline">flags.enabled?(:feature, for: user)</code>)</li>
+    <li><strong>Deploy</strong> — the code ships to production, invisible to every user</li>
+    <li><strong>Validate</strong> — enable for a small set of test users via an admin surface</li>
+    <li><strong>Release</strong> — enable globally</li>
+    <li><strong>Contract</strong> — remove the flag check entirely in a follow-up change</li>
+  </ol>
+
+  <div class="note"><strong>Rules that keep this from rotting:</strong> guard both the UI <em>and</em> the underlying logic — never rely on hiding a button as the only gate, since a direct request or an old cached client can still reach the code path. One flag per feature, named for what it does. Clean up the flag promptly once it's globally enabled; a flag nobody removes becomes permanent dead-code branching that every future reader has to reason about.</div>
+</section>
+
+<!-- TEST ISOLATION -->
+<section class="card" id="test-isolation">
+  <h2><span class="icon">▸</span> Test isolation is non-negotiable</h2>
+
+  <p><strong>Tests must be hermetic.</strong> No test should be able to affect another test's outcome. Global shared state — ETS tables, Redis, the filesystem, process registries — persists across tests by default; a flag like <code class="inline">async: false</code> only serializes tests <em>within one module</em>, not across modules.</p>
+
+  <h3>A worked example: the ETS cross-contamination bug</h3>
+
+<pre><span class="comment"># Test A writes an incomplete map to a shared ETS cache</span>
+<span class="cmd">Test A</span> writes <span class="str">%{id: 1}</span> to shared ETS <span class="op">(incomplete map)</span>
+    <span class="op">│</span>
+<span class="comment"># Test B's own setup reads from that same cache, unaware A ran first</span>
+<span class="cmd">Test B</span>'s GenServer.init reads from ETS cache
+    <span class="op">│</span>
+<span class="cmd">Test B</span> gets <span class="str">%{id: 1}</span>, tries to process it
+    <span class="op">│</span>
+<span class="comment"># crashes on a field that a *complete* record would always have</span>
+Crashes on missing <span class="flag">:content</span> key
+    <span class="op">│</span>
+<span class="comment"># only reproduces when A and B happen to run in this order</span>
+Flaky test failure <span class="op">(only when A and B interleave)</span></pre>
+
+  <p>The fix isn't a defensive nil-check in the code under test — that would hide a real test-isolation bug behind a runtime guard. The fix is cleaning the shared cache before <em>and</em> after every test:</p>
+
+<pre><span class="comment"># in a shared test-case template, not scattered across individual test files</span>
+DataCase.setup_sandbox<span class="op">/1</span><span class="op">:</span>
+  <span class="op">:</span>ets.delete_all_objects<span class="op">(</span><span class="str">:cache_table</span><span class="op">)</span>  <span class="comment"># before</span>
+  on_exit<span class="op">(</span>fn <span class="op">-></span> <span class="op">:</span>ets.delete_all_objects<span class="op">(</span><span class="str">:cache_table</span><span class="op">)</span> end<span class="op">)</span>  <span class="comment"># after</span></pre>
+
+  <div class="note"><strong>Centralize cleanup in the shared test-case template</strong> (the one thing every test file already extends), not in scattered per-test <code class="inline">setup</code> blocks — a rule that has to be remembered and re-added to every new test file will eventually be forgotten in one of them, and that one becomes the next flaky failure.</div>
+</section>
+
+<!-- ROOT CAUSE -->
+<section class="card" id="root-cause">
+  <h2><span class="icon">▸</span> Root cause, not workarounds</h2>
+
+  <p><strong>Never hide the underlying issue with a defensive fix.</strong> Defensive code is a legitimate production safety net — but it must never be the <em>primary</em> fix, or the real bug just waits for the next unguarded path to it.</p>
+
+  <h3>When a test fails</h3>
+  <ol>
+    <li>Find the actual root cause</li>
+    <li>Fix the root cause</li>
+    <li>Add a defensive fallback as a safety net, optionally</li>
+    <li>Document <em>why</em> the defensive code exists — otherwise a future cleanup pass deletes it as "dead code" and the original bug resurfaces</li>
+  </ol>
+
+  <h3>When a deploy fails</h3>
+  <ol>
+    <li>Fix the deploy issue</li>
+    <li>Add the check to the pre-deploy script so this exact failure can't recur silently</li>
+    <li>Update the deployment-discipline docs with the lesson learned</li>
+    <li>If the failure class was catchable locally, add it to the pre-commit hooks too</li>
+  </ol>
+
+  <div class="note danger"><strong>Anti-patterns:</strong> adding a <code class="inline">rescue</code>/<code class="inline">catch</code> block purely to silence an error; skipping a test because it "sometimes fails"; adding <code class="inline">|| true</code> to a deploy command that's failing; deleting code that crashes instead of understanding why it crashes. Each of these makes the symptom disappear while leaving the cause fully intact.</div>
+</section>
+
+<!-- SUMMARY -->
+<section class="card" id="summary">
+  <h2><span class="icon">▸</span> Summary checklist</h2>
+
+  <table>
+    <tr><th>Principle</th><th>One-line check</th></tr>
+    <tr><td>Shift-left</td><td>Does a local hook catch everything the CI gate catches?</td></tr>
+    <tr><td>Pre-deploy</td><td>Does the image actually boot, not just build?</td></tr>
+    <tr><td>Expand/contract</td><td>Does old code still work against the new schema mid-rollout?</td></tr>
+    <tr><td>Feature flags</td><td>Is the logic guarded, not just the UI?</td></tr>
+    <tr><td>Test isolation</td><td>Is shared state cleaned in a template, before <em>and</em> after?</td></tr>
+    <tr><td>Root cause</td><td>Did the fix address the cause, or just silence the symptom?</td></tr>
+  </table>
+
+  <div class="note new">None of these require exotic tooling — a pre-commit hook, a pre-deploy script, a shared test-case template, and a habit of asking "does this fix the cause or the symptom" cover all six.</div>
+</section>
+
+</div>
+</main>
+
+<footer>
+  Production Delivery Principles · Rose Pine theme · palette from <a href="https://rosepinetheme.com">rosepinetheme.com</a> · principles distilled from running a real production system, not a specific framework's docs
+</footer>
+
+<script src="wallpaper-engine.js?v=4"></script>
+<script src="app.js?v=4"></script>
+<script src="tweaks.js?v=4"></script>
+
+</body>
+</html>

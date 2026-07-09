@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caddy Docker Proxy — Comprehensive Cheatsheet</title>
+<script>(function(){try{var t=(JSON.parse(localStorage.getItem("docs-hub:tweaks")||"{}")||{}).theme;if(t==="moon"||t==="dawn"||t==="main"){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
+<link rel="stylesheet" href="styles.css?v=6">
+<style>
+  /* caddy-docker-proxy syntax token colors */
+  pre .cmd     { color: var(--love); font-weight: 600; }
+  pre .key     { color: var(--gold); }
+  pre .val     { color: var(--foam); }
+  pre .str     { color: var(--foam); }
+  pre .path    { color: var(--iris); }
+  pre .var     { color: var(--rose); }
+  pre .comment { color: var(--muted); font-style: italic; }
+  pre .op      { color: var(--subtle); }
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to content</a>
+<nav class="back-link">
+  <a href="/">← All notes</a>
+  <div class="theme-switch" role="radiogroup" aria-label="Theme">
+    <button type="button" data-theme="main">Main</button>
+    <button type="button" data-theme="moon">Moon</button>
+    <button type="button" data-theme="dawn">Dawn</button>
+  </div>
+</nav>
+
+<header>
+  <h1>Caddy <span class="accent">Docker Proxy</span> cheatsheet</h1>
+  <p>Label-driven reverse proxy for a multi-app homelab — no shared Caddyfile, zero-downtime cutover — Rose Pine theme</p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#why">Why caddy-docker-proxy</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#image">Custom image</a>
+  <a href="#compose">Standalone compose service</a>
+  <a href="#fallback">Fallback Caddyfile</a>
+  <a href="#basic-labels">Basic labels</a>
+  <a href="#multi-hostname">Multi-hostname labels</a>
+  <a href="#multi-upstream">Multi-upstream + health checks</a>
+  <a href="#force-ssl-trap">The force_ssl trap</a>
+  <a href="#restart-vs-reload">restart vs. reload</a>
+  <a href="#no-import">Never use import</a>
+  <a href="#no-log-dump">Never log the Caddyfile</a>
+  <a href="#ci-simplification">CI simplification</a>
+  <a href="#cutover">Zero-downtime cutover</a>
+  <a href="#troubleshooting">Troubleshooting</a>
+</nav>
+
+<main id="main">
+<div class="grid">
+
+<!-- WHY -->
+<section class="card" id="why">
+  <h2><span class="icon">▸</span> Why caddy-docker-proxy</h2>
+
+  <p>A homelab running one app is easy: one Caddyfile, one reverse-proxy block. It stops being easy at app two. A single shared <code class="inline">/opt/caddy/Caddyfile</code> managed by one repo's CI means every other app's deploy pipeline has to SCP in, append its own block, and avoid clobbering everyone else's — fragile append logic, no clean way to remove an entry, and a merge conflict waiting to happen the day two deploys race.</p>
+
+  <div class="note"><strong>The fix:</strong> <a href="https://github.com/lucaslorentz/caddy-docker-proxy" target="_blank" rel="noopener">caddy-docker-proxy</a> reads reverse-proxy config from <em>Docker container labels</em> instead of a static file. Each app repo only ever edits its own <code class="inline">docker-compose.yml</code> — never a file another repo also touches.</div>
+
+  <h3>Before / after</h3>
+  <table>
+    <tr><th>Static Caddyfile</th><th>caddy-docker-proxy</th></tr>
+    <tr><td>One file, N repos writing to it</td><td>N repos, each owning only their own labels</td></tr>
+    <tr><td>CI must SCP + append + restart Caddy</td><td>CI just recreates containers; Caddy notices</td></tr>
+    <tr><td>Removing a route means editing someone else's block</td><td>Removing a route means deleting your own labels</td></tr>
+  </table>
+</section>
+
+<!-- ARCHITECTURE -->
+<section class="card" id="architecture">
+  <h2><span class="icon">▸</span> Architecture</h2>
+
+<pre class="tree"><span class="path">                    ┌─────────────────────────┐</span>
+<span class="path">                    │   caddy-docker-proxy     │</span>
+<span class="path">                    │   (listens 80/443)       │</span>
+<span class="path">                    │   reads container labels │</span>
+<span class="path">                    │   + fallback Caddyfile   │</span>
+<span class="path">                    └────────┬────────────────┘</span>
+<span class="path">                             │ </span><span class="comment">proxy network</span>
+<span class="path">              ┌──────────────┼──────────────────┐</span>
+<span class="path">              │              │                  │</span>
+<span class="path">         app-a:4000     app-b-1/2:4000     (future apps)</span></pre>
+
+  <ul>
+    <li>One container (<code class="inline">caddy-proxy</code>) mounts the Docker socket, watches for label changes, and rewrites its routing table live — no restart needed when an app's labels change.</li>
+    <li>Every app container joins a shared, externally-created <code class="inline">proxy</code> Docker network so Caddy can reach it by service name.</li>
+    <li>A bind-mounted fallback Caddyfile still exists for routes that aren't backed by any container (a bare landing page at the root domain, say).</li>
+  </ul>
+</section>
+
+<!-- CUSTOM IMAGE -->
+<section class="card" id="image">
+  <h2><span class="icon">▸</span> Custom image</h2>
+
+  <p>The upstream <code class="inline">caddy-docker-proxy</code> image doesn't bundle a DNS-01 challenge provider, so a custom build via <a href="https://github.com/caddyserver/xcaddy" target="_blank" rel="noopener">xcaddy</a> is needed to add one (Cloudflare, in this example).</p>
+
+<pre><span class="key">ARG</span> <span class="val">CADDY_VERSION</span><span class="op">=</span><span class="val">2.11.2</span>
+<span class="cmd">FROM</span> caddy:<span class="var">${CADDY_VERSION}</span>-builder <span class="key">AS</span> builder
+
+<span class="cmd">RUN</span> xcaddy build <span class="var">${CADDY_VERSION}</span> \
+    <span class="key">--with</span> <span class="path">github.com/lucaslorentz/caddy-docker-proxy/plugin/v2</span> \
+    <span class="key">--with</span> <span class="path">github.com/caddy-dns/cloudflare</span>
+
+<span class="cmd">FROM</span> caddy:<span class="var">${CADDY_VERSION}</span>-alpine
+
+<span class="cmd">COPY</span> --from<span class="op">=</span>builder <span class="path">/usr/bin/caddy</span> <span class="path">/usr/bin/caddy</span>
+
+<span class="cmd">CMD</span> ["caddy", "docker-proxy"]</pre>
+
+  <div class="note"><strong>Swap the DNS plugin</strong> for whatever provider actually hosts your zone — <a href="https://github.com/caddy-dns" target="_blank" rel="noopener">caddy-dns</a> has modules for most of the popular ones. The rest of this guide is provider-agnostic once the image is built.</div>
+</section>
+
+<!-- COMPOSE -->
+<section class="card" id="compose">
+  <h2><span class="icon">▸</span> Standalone compose service</h2>
+
+  <p>Caddy lives as its own standalone compose stack on the Docker host — independent of any single app repo — so it survives every app's deploys untouched.</p>
+
+<pre><span class="key">services</span><span class="op">:</span>
+  <span class="key">caddy-proxy</span><span class="op">:</span>
+    <span class="key">container_name</span><span class="op">:</span> <span class="val">caddy-proxy</span>
+    <span class="key">build</span><span class="op">:</span> <span class="val">.</span>
+    <span class="key">restart</span><span class="op">:</span> <span class="val">unless-stopped</span>
+    <span class="key">ports</span><span class="op">:</span>
+      <span class="op">-</span> <span class="str">"80:80"</span>
+      <span class="op">-</span> <span class="str">"443:443"</span>
+    <span class="key">environment</span><span class="op">:</span>
+      <span class="key">CF_API_TOKEN</span><span class="op">:</span> <span class="str">"</span><span class="var">${CF_API_TOKEN}</span><span class="str">"</span>
+      <span class="key">CADDY_DOCKER_CADDYFILE_PATH</span><span class="op">:</span> <span class="str">"/etc/caddy/Caddyfile"</span>
+      <span class="key">CADDY_INGRESS_NETWORKS</span><span class="op">:</span> <span class="str">"proxy"</span>
+      <span class="key">DOCKER_API_VERSION</span><span class="op">:</span> <span class="str">"1.44"</span>
+    <span class="key">volumes</span><span class="op">:</span>
+      <span class="op">-</span> <span class="path">/var/run/docker.sock:/var/run/docker.sock</span>
+      <span class="op">-</span> <span class="path">./Caddyfile:/etc/caddy/Caddyfile:ro</span>
+      <span class="op">-</span> <span class="val">caddy_data:/data</span>
+      <span class="op">-</span> <span class="val">caddy_config:/config</span>
+    <span class="key">networks</span><span class="op">:</span>
+      <span class="op">-</span> <span class="val">proxy</span>
+
+<span class="key">volumes</span><span class="op">:</span>
+  <span class="key">caddy_data</span><span class="op">:</span>
+  <span class="key">caddy_config</span><span class="op">:</span>
+
+<span class="key">networks</span><span class="op">:</span>
+  <span class="key">proxy</span><span class="op">:</span>
+    <span class="key">external</span><span class="op">:</span> <span class="val">true</span></pre>
+
+  <div class="note"><strong>Two env vars do the real work:</strong> <code class="inline">CADDY_INGRESS_NETWORKS</code> tells Caddy which Docker network to actually route traffic through (it may be attached to several); <code class="inline">CADDY_DOCKER_CADDYFILE_PATH</code> points it at the fallback file below.</div>
+</section>
+
+<!-- FALLBACK -->
+<section class="card" id="fallback">
+  <h2><span class="icon">▸</span> Fallback Caddyfile</h2>
+
+  <p>For routes with no backing container — a bare root-domain response, say:</p>
+
+<pre><span class="path">example.com</span> {
+	<span class="key">tls</span> {
+		<span class="key">dns</span> cloudflare <span class="var">{env.CF_API_TOKEN}</span>
+	}
+	<span class="cmd">respond</span> <span class="str">"Hello from the homelab!"</span>
+}</pre>
+
+  <div class="note"><strong>Bind-mounted, read-only.</strong> This file is mounted at container start — edit the host copy, the container sees it immediately (Caddy hot-reloads on file change). It coexists with every label-driven route; caddy-docker-proxy merges both sources.</div>
+</section>
+
+<!-- BASIC LABELS -->
+<section class="card" id="basic-labels">
+  <h2><span class="icon">▸</span> Basic labels (one hostname, one upstream)</h2>
+
+  <p>The simplest case — a single-instance service, one hostname:</p>
+
+<pre><span class="key">grafana</span><span class="op">:</span>
+    <span class="key">image</span><span class="op">:</span> <span class="val">grafana/grafana:latest</span>
+    <span class="key">labels</span><span class="op">:</span>
+      <span class="key">caddy</span><span class="op">:</span> <span class="val">grafana.example.com</span>
+      <span class="key">caddy.tls.dns</span><span class="op">:</span> cloudflare <span class="var">{env.CF_API_TOKEN}</span>
+      <span class="key">caddy.reverse_proxy</span><span class="op">:</span> <span class="str">"{{upstreams 3000}}"</span>
+    <span class="key">networks</span><span class="op">:</span>
+      <span class="op">-</span> <span class="val">default</span>
+      <span class="op">-</span> <span class="val">proxy</span></pre>
+
+  <div class="note"><strong><code class="inline">{{upstreams 3000}}</code></strong> is a caddy-docker-proxy template function — it resolves to this container's own address on port 3000, so you never hardcode an IP.</div>
+</section>
+
+<!-- MULTI-HOSTNAME -->
+<section class="card" id="multi-hostname">
+  <h2><span class="icon">▸</span> Multi-hostname labels on one container</h2>
+
+  <p>A single service can expose more than one public hostname — a chat app and its companion API on different domains, both backed by the same container. Number the label groups (<code class="inline">caddy_0</code>, <code class="inline">caddy_1</code>, …) to define multiple independent routes:</p>
+
+<pre><span class="key">app</span><span class="op">:</span>
+    <span class="key">labels</span><span class="op">:</span>
+      <span class="key">caddy_0</span><span class="op">:</span> <span class="val">app.example.com</span>
+      <span class="key">caddy_0.tls.dns</span><span class="op">:</span> cloudflare <span class="var">{env.CF_API_TOKEN}</span>
+      <span class="key">caddy_0.reverse_proxy</span><span class="op">:</span> <span class="str">"{{upstreams 4000}}"</span>
+      <span class="key">caddy_1</span><span class="op">:</span> <span class="val">api.example.com</span>
+      <span class="key">caddy_1.tls.dns</span><span class="op">:</span> cloudflare <span class="var">{env.CF_API_TOKEN}</span>
+      <span class="key">caddy_1.reverse_proxy</span><span class="op">:</span> <span class="str">"{{upstreams 4000}}"</span></pre>
+
+  <div class="note"><strong>Without the <code class="inline">_0</code>/<code class="inline">_1</code> numbering</strong>, a second bare <code class="inline">caddy:</code> label on the same container would just overwrite the first — labels are a flat key-value map, so caddy-docker-proxy needs the numbered-group convention to know these are two distinct route blocks rather than one being clobbered by the other.</div>
+</section>
+
+<!-- MULTI-UPSTREAM -->
+<section class="card" id="multi-upstream">
+  <h2><span class="icon">▸</span> Multi-upstream + health checks</h2>
+
+  <p>Run two replicas of the same app, give them the <em>same</em> hostname label, and caddy-docker-proxy automatically load-balances across both — the basis of a zero-downtime rolling restart (take one down, Caddy routes everything to the other, bring it back, repeat for the second):</p>
+
+<pre><span class="key">app-1</span><span class="op">:</span>
+    <span class="key">labels</span><span class="op">:</span>
+      <span class="key">caddy_0</span><span class="op">:</span> <span class="val">app.example.com</span>
+      <span class="key">caddy_0.tls.dns</span><span class="op">:</span> cloudflare <span class="var">{env.CF_API_TOKEN}</span>
+      <span class="key">caddy_0.reverse_proxy</span><span class="op">:</span> <span class="str">"{{upstreams 4000}}"</span>
+      <span class="key">caddy_0.reverse_proxy.health_uri</span><span class="op">:</span> <span class="val">/health</span>
+      <span class="key">caddy_0.reverse_proxy.health_interval</span><span class="op">:</span> <span class="val">5s</span>
+      <span class="key">caddy_0.reverse_proxy.health_timeout</span><span class="op">:</span> <span class="val">3s</span>
+      <span class="key">caddy_0.reverse_proxy.fail_duration</span><span class="op">:</span> <span class="val">15s</span>
+      <span class="key">caddy_0.reverse_proxy.health_headers.X-Forwarded-Proto</span><span class="op">:</span> <span class="val">https</span>
+
+<span class="key">app-2</span><span class="op">:</span>
+    <span class="key">labels</span><span class="op">:</span>
+      <span class="key">caddy_0</span><span class="op">:</span> <span class="val">app.example.com</span>
+      <span class="key">caddy_0.reverse_proxy</span><span class="op">:</span> <span class="str">"{{upstreams 4000}}"</span></pre>
+
+  <div class="note"><strong>Only one replica needs the full health-check block.</strong> caddy-docker-proxy merges all containers sharing a hostname into one upstream pool — the TLS/health config only needs to be declared once; the second replica just needs the matching hostname label to join the pool.</div>
+</section>
+
+<!-- FORCE_SSL TRAP -->
+<section class="card" id="force-ssl-trap">
+  <h2><span class="icon">▸</span> The <code class="inline">force_ssl</code> trap</h2>
+
+  <div class="note danger"><strong>Without <code class="inline">health_headers.X-Forwarded-Proto: https</code>, health checks silently take down every upstream.</strong> If the app framework enforces HTTPS (Phoenix's <code class="inline">force_ssl</code>, Rails' <code class="inline">force_ssl</code>, etc.), Caddy's health-check probe — a plain HTTP request with no forwarded-proto header — gets redirected (301). Caddy treats a 301 as "unhealthy," marks every upstream down, and starts returning 503 to <em>all</em> real traffic, not just the health check.</div>
+
+  <p>The fix is one label: tell the app (via the forwarded header) that the health check's request, though technically HTTP, arrived over a proxy that terminates TLS — so it shouldn't force a redirect.</p>
+
+<pre><span class="key">caddy_0.reverse_proxy.health_headers.X-Forwarded-Proto</span><span class="op">:</span> <span class="val">https</span></pre>
+
+  <p>This is the single most common way a caddy-docker-proxy deploy looks fine in every log line except one: every request 503s, and the only difference from a working deploy is this header.</p>
+</section>
+
+<!-- RESTART VS RELOAD -->
+<section class="card" id="restart-vs-reload">
+  <h2><span class="icon">▸</span> <code class="inline">docker restart</code> vs. <code class="inline">caddy reload</code></h2>
+
+<pre><span class="cmd">docker</span> <span class="key">restart</span> caddy-proxy   <span class="comment"># correct — forces fresh DNS resolution</span>
+caddy <span class="key">reload</span>                <span class="comment"># wrong here — keeps stale upstream IPs if config text is unchanged</span></pre>
+
+  <p>Caddy's own <code class="inline">reload</code> only re-parses config that actually changed. When an upstream container is recreated with a new internal IP but the same hostname label, the config <em>text</em> looks identical to Caddy — so a reload doesn't re-resolve the DNS, and traffic keeps hitting the dead container's old IP until the process fully restarts.</p>
+
+  <div class="note">This mostly matters when scripting deploys by hand. caddy-docker-proxy's own label-watching loop already handles the common recreate-a-container case correctly — this gotcha is for anyone tempted to add a manual <code class="inline">caddy reload</code> step "just to be safe."</div>
+</section>
+
+<!-- NO IMPORT -->
+<section class="card" id="no-import">
+  <h2><span class="icon">▸</span> Never use <code class="inline">import</code> in the Caddyfile</h2>
+
+  <div class="note danger"><strong>Only the one bind-mounted file is visible inside the container.</strong> Writing a second config file alongside the Caddyfile on the host (say, <code class="inline">/opt/caddy/app-extra</code>) and referencing it with an <code class="inline">import</code> directive works when testing Caddy locally — but inside this container, nothing outside the single bind-mounted path exists. Caddy fails to find the imported file and crash-loops on startup.</div>
+
+  <p>Keep the fallback Caddyfile a single, complete, self-contained file. Everything else belongs in container labels, not a second config file.</p>
+</section>
+
+<!-- NO LOG DUMP -->
+<section class="card" id="no-log-dump">
+  <h2><span class="icon">▸</span> Never dump the Caddyfile to CI logs</h2>
+
+  <div class="note danger"><strong>The Caddyfile holds your DNS-challenge API token</strong> (<code class="inline">{env.CF_API_TOKEN}</code> is a reference, but any debug step that <code class="inline">cat</code>s the rendered config or echoes the resolved environment will print the real token into CI logs.</div>
+
+<pre><span class="comment"># fine — targeted, no secret leaks</span>
+ssh host <span class="str">"grep reverse_proxy /root/caddy/Caddyfile"</span>
+
+<span class="comment"># dangerous — dumps everything, including the token if it's ever inlined</span>
+ssh host <span class="str">"cat /root/caddy/Caddyfile"</span></pre>
+
+  <p>Use targeted <code class="inline">grep</code> for whatever you're actually debugging (a specific hostname, a specific directive) instead of dumping the whole file.</p>
+</section>
+
+<!-- CI SIMPLIFICATION -->
+<section class="card" id="ci-simplification">
+  <h2><span class="icon">▸</span> What disappears from app CI</h2>
+
+  <p>Before caddy-docker-proxy, every app's deploy pipeline needed its own Caddyfile-management step: SCP the file down, run some append/render logic, SCP it back up, then <code class="inline">docker restart caddy</code>. After the migration, an app's deploy is just:</p>
+
+<pre><span class="cmd">docker</span> compose pull
+<span class="cmd">docker</span> compose up <span class="key">-d</span> <span class="key">--force-recreate</span> <span class="key">--no-build</span> <span class="key">--remove-orphans</span></pre>
+
+  <p>caddy-docker-proxy notices the recreated container and its labels on its own — no proxy-specific step in the app's pipeline at all. One less thing that can race with another app's deploy.</p>
+</section>
+
+<!-- CUTOVER -->
+<section class="card" id="cutover">
+  <h2><span class="icon">▸</span> Zero-downtime cutover procedure</h2>
+
+  <p>Migrating an existing static-Caddyfile setup to caddy-docker-proxy without dropping production traffic, in seven phases:</p>
+
+  <h3>1–2. Setup &amp; build</h3>
+<pre><span class="comment"># confirm the new proxy's infra files are already deployed to the host, then:</span>
+<span class="cmd">ssh</span> host <span class="str">"cd /root/caddy && docker compose build"</span></pre>
+
+  <h3>3. Bring it up on test ports first</h3>
+<pre><span class="comment"># temporarily remap 80/443 -&gt; 8080/8443 in docker-compose.yml, then:</span>
+<span class="cmd">ssh</span> host <span class="str">"cd /root/caddy && docker compose up -d"</span>
+<span class="comment"># wait ~90s for container discovery + ACME certificate issuance</span></pre>
+
+  <h3>Verify every route on the test port before touching production</h3>
+<pre><span class="cmd">curl</span> <span class="key">-sk</span> <span class="key">-o</span> /dev/null <span class="key">-w</span> <span class="str">'%{http_code}'</span> \
+     <span class="key">--resolve</span> <span class="str">'app.example.com:8443:127.0.0.1'</span> \
+     <span class="str">'https://app.example.com:8443/health'</span>
+<span class="comment"># repeat per hostname — 200/302 = pass, anything else = fix before proceeding</span></pre>
+
+  <h3>4. Cutover gate — a confirmation prompt, not a rubber stamp</h3>
+  <div class="note">Everything above ran without touching production traffic. This is the one manual gate: a script that requires typing a literal confirmation word before proceeding is the difference between "verified on test ports" and "verified in production" — don't automate this step away.</div>
+
+  <h3>5. Production cutover</h3>
+<pre><span class="cmd">ssh</span> host <span class="str">"docker stop caddy-old"</span>
+<span class="cmd">ssh</span> host <span class="str">"cd /root/caddy && docker compose down && sed -i 's/8080:80/80:80/;s/8443:443/443:443/' docker-compose.yml && docker compose up -d"</span>
+<span class="comment"># wait ~10s for TLS certificate issuance on the real ports</span></pre>
+
+  <h3>6. Verify production, for real this time</h3>
+<pre><span class="cmd">curl</span> <span class="key">-sf</span> <span class="key">-o</span> /dev/null <span class="key">-w</span> <span class="str">'%{http_code}'</span> <span class="str">"https://app.example.com/health"</span>
+<span class="comment"># no --resolve trick needed now — this is the real public hostname</span></pre>
+  <div class="note danger"><strong>If this step fails, roll back immediately:</strong> <code class="inline">docker compose down && docker start caddy-old</code> restores the previous static Caddyfile setup in seconds.</div>
+
+  <h3>7. Cleanup</h3>
+<pre><span class="cmd">ssh</span> host <span class="str">"docker rm caddy-old"</span>
+<span class="cmd">ssh</span> host <span class="str">"rm -f /opt/caddy/Caddyfile"</span></pre>
+</section>
+
+<!-- TROUBLESHOOTING -->
+<section class="card" id="troubleshooting">
+  <h2><span class="icon">▸</span> Troubleshooting checklist</h2>
+
+  <h3>Route not appearing at all</h3>
+<pre><span class="cmd">docker</span> logs caddy-proxy <span class="key">--tail</span> <span class="val">50</span>
+<span class="comment"># confirm the hostname label and reverse_proxy label both parsed without errors</span></pre>
+
+  <h3>Confirm the app container actually has the labels</h3>
+<pre><span class="cmd">docker</span> inspect <span class="key">--format</span> <span class="str">'{{json .Config.Labels}}'</span> app-container <span class="op">|</span> jq</pre>
+
+  <h3>Confirm the container is on the right network</h3>
+<pre><span class="cmd">docker</span> network inspect proxy <span class="op">|</span> jq <span class="str">'.[0].Containers'</span></pre>
+
+  <h3>Every request 503s</h3>
+  <p>Check the <a href="#force-ssl-trap">force_ssl trap</a> first — it's the single most common cause. Confirm with:</p>
+<pre><span class="cmd">docker</span> inspect <span class="key">--format</span> <span class="str">'{{json .Config.Labels}}'</span> app-container <span class="op">|</span> jq <span class="str">'."caddy_0.reverse_proxy.health_headers.X-Forwarded-Proto"'</span></pre>
+
+  <h3>Route works on test ports but not production</h3>
+  <p>Almost always a DNS record still pointing at the old static-Caddyfile container's IP, or a firewall rule scoped to the old container name. Re-check the <a href="#cutover">cutover</a> DNS/firewall assumptions before assuming Caddy itself is broken.</p>
+</section>
+
+</div>
+</main>
+
+<footer>
+  Caddy Docker Proxy cheatsheet · Rose Pine theme · palette from <a href="https://rosepinetheme.com">rosepinetheme.com</a> · hostnames and repo paths in this guide are genericized examples, not real infrastructure · <a href="https://caddyserver.com/docs/" target="_blank" rel="noopener">Caddy docs</a> are the authoritative reference
+</footer>
+
+<script src="wallpaper-engine.js?v=4"></script>
+<script src="app.js?v=4"></script>
+<script src="tweaks.js?v=4"></script>
+
+</body>
+</html>

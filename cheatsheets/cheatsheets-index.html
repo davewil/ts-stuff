@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cheatsheets — TypeScript 6.0 · curl · ffmpeg · Rose Pine</title>
+<title>Cheatsheets — TypeScript 6.0 · curl · ffmpeg · Caddy · Delivery Principles · Rose Pine</title>
 <script>(function(){try{var t=(JSON.parse(localStorage.getItem("docs-hub:tweaks")||"{}")||{}).theme;if(t==="moon"||t==="dawn"||t==="main"){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
 <link rel="stylesheet" href="styles.css?v=4">
 <style>
@@ -24,9 +24,11 @@
     font-family: "JetBrains Mono", monospace;
     margin-right: 0.4rem;
   }
-  section.preview .badge.ts     { color: var(--gold); border-color: var(--gold); }
-  section.preview .badge.curl   { color: var(--love); border-color: var(--love); }
-  section.preview .badge.ffmpeg { color: var(--pine); border-color: var(--pine); }
+  section.preview .badge.ts         { color: var(--gold); border-color: var(--gold); }
+  section.preview .badge.curl       { color: var(--love); border-color: var(--love); }
+  section.preview .badge.ffmpeg     { color: var(--pine); border-color: var(--pine); }
+  section.preview .badge.caddy      { color: var(--iris); border-color: var(--iris); }
+  section.preview .badge.principles { color: var(--rose); border-color: var(--rose); }
 
   section.preview .open {
     display: inline-block;
@@ -82,8 +84,8 @@
 </nav>
 
 <header>
-  <h1><span class="accent">Cheatsheets</span> · TypeScript, curl &amp; ffmpeg</h1>
-  <p>Three standalone pocket references. Independent of each other and of the <a class="inline-docs" href="event-loop-index.html">JS event-loop series</a>. Pick one — there's no reading order.</p>
+  <h1><span class="accent">Cheatsheets</span> · TypeScript, curl, ffmpeg, Caddy &amp; Delivery Principles</h1>
+  <p>Five standalone pocket references. Independent of each other and of the <a class="inline-docs" href="event-loop-index.html">JS event-loop series</a>. Pick one — there's no reading order.</p>
 </header>
 
 <button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
@@ -94,10 +96,14 @@
   <a href="#ts">TypeScript 6.0</a>
   <a href="#curl">curl</a>
   <a href="#ffmpeg">ffmpeg / ffprobe</a>
+  <a href="#caddy">Caddy Docker Proxy</a>
+  <a href="#principles">Delivery Principles</a>
   <a href="#architecture">How it's built</a>
   <a href="#resources-ts">TS resources</a>
   <a href="#resources-curl">curl resources</a>
   <a href="#resources-ffmpeg">ffmpeg resources</a>
+  <a href="#resources-caddy">Caddy resources</a>
+  <a href="#resources-principles">Principles resources</a>
   <a href="#tools">Tools</a>
   <a href="#credits">Credits</a>
   <a href="event-loop-index.html">→ Event-loop series</a>
@@ -109,18 +115,20 @@
 <!-- ABOUT -->
 <section class="card hero" id="about">
   <h2><span class="icon">▸</span> About these cheatsheets</h2>
-  <p>Three unrelated quick-references that happen to share the Rose Pine theme:</p>
+  <p>Five unrelated quick-references that happen to share the Rose Pine theme:</p>
   <ul>
     <li><strong>TypeScript 6.0</strong> — 23 sections from primitives through 5.x → 6.0 language features. Every section heading links to the corresponding chapter of the TypeScript Handbook; the "What's new" card has per-version links to each release-notes page (5.0 → 6.0). Verified live against npm at write time.</li>
     <li><strong>curl</strong> — 16 sections of HTTP-stack recipes covering methods, headers, body forms, auth (Basic / Bearer / Digest / NTLM / SigV4 / .netrc), TLS / mTLS, proxies, retries &amp; timing, cookies &amp; sessions, parallel transfers, and non-HTTP protocols (FTP, SMTP, IMAP, WebSocket, MQTT).</li>
     <li><strong>ffmpeg / ffprobe</strong> — 15 sections covering transcoding, filter graphs, trimming/concatenation, audio (loudness normalization), subtitles, GIF/thumbnail extraction, streaming (HLS/DASH/RTMP), hardware acceleration, and ffprobe inspection/scripting. Nearly every command was run against a real file while writing this; the handful that couldn't be — subtitle burn-in and <code class="inline">drawtext</code> (this build lacks libass/freetype), RTMP push and the <code class="inline">fswatch</code> loop (no live endpoint / tool on hand), and the NVENC/VAAPI hardware encoders (no matching GPU) — are sourced from ffmpeg.org/NVIDIA's official docs instead and marked as such.</li>
+    <li><strong>Caddy Docker Proxy</strong> — 15 sections on label-driven reverse proxying for a multi-app homelab: no shared Caddyfile, zero-downtime cutover, health-check traps, CI simplification. Mined from a real deployed multi-app setup; hostnames and repo paths are genericized examples, not real infrastructure.</li>
+    <li><strong>Production Delivery Principles</strong> — shift-left CI, expand/contract migrations, feature-flag lifecycle, and test-isolation discipline, distilled from running a real production system rather than a specific framework's docs.</li>
   </ul>
 
   <h3>Design principle</h3>
   <p>Surface-level reference material is everywhere. What's harder to find is reference material that <em>also</em> answers <em>why</em> — why is this option deprecated, what trap does this flag avoid. Each cheatsheet pairs a high-density quick-scan layout with inline notes, warnings, and links to canonical specs.</p>
 
   <h3>Mechanics</h3>
-  <p>Both pages are fully responsive (1 / 2 / 3 columns by viewport), with a sticky table-of-contents bar on desktop and a hamburger drawer on mobile. They share <code class="inline">styles.css</code> + <code class="inline">app.js</code> (sibling files in this folder) — no build step, no framework, no dependencies. Print works fine too.</p>
+  <p>Every page is fully responsive (1 / 2 / 3 columns by viewport), with a sticky table-of-contents bar on desktop and a hamburger drawer on mobile. They share <code class="inline">styles.css</code> + <code class="inline">app.js</code> (sibling files in this folder) — no build step, no framework, no dependencies. Print works fine too.</p>
 </section>
 
 <!-- TS -->
@@ -174,6 +182,38 @@
   <a class="open" href="ffmpeg-cheatsheet.html">Open cheatsheet →</a>
 </section>
 
+<!-- CADDY -->
+<section class="card preview" id="caddy">
+  <h2><span class="badge caddy">Caddy</span> <a href="caddy-docker-proxy-cheatsheet.html">Caddy Docker Proxy cheatsheet</a></h2>
+  <p>Label-driven reverse proxy for a multi-app homelab — 15 sections from "why a shared Caddyfile doesn't scale" to a real zero-downtime cutover script. Mined from a deployed multi-app setup; hostnames genericized.</p>
+  <ul>
+    <li>Architecture: label-reading container, docker-socket mount, shared <code class="inline">proxy</code> network</li>
+    <li>Custom image via <code class="inline">xcaddy</code>, standalone compose service, fallback Caddyfile</li>
+    <li>Basic single-app labels, multi-hostname labels on one container (<code class="inline">caddy_0</code>/<code class="inline">caddy_1</code>)</li>
+    <li>Multi-upstream + health checks for zero-downtime rolling restarts</li>
+    <li>Traps: the <code class="inline">force_ssl</code> 301 loop, <code class="inline">docker restart</code> vs. <code class="inline">caddy reload</code>, the <code class="inline">import</code> bind-mount crash</li>
+    <li>What disappears from app CI once you're on this pattern</li>
+    <li>Full zero-downtime cutover procedure with a confirmation gate</li>
+    <li>Troubleshooting checklist</li>
+  </ul>
+  <a class="open" href="caddy-docker-proxy-cheatsheet.html">Open cheatsheet →</a>
+</section>
+
+<!-- PRINCIPLES -->
+<section class="card preview" id="principles">
+  <h2><span class="badge principles">Principles</span> <a href="production-delivery-principles.html">Production Delivery Principles</a></h2>
+  <p>Lessons from running a real production system, enshrined in tooling rather than just documentation — shift-left CI, safe migrations, and a worked flaky-test root-cause story.</p>
+  <ul>
+    <li>Shift-left: why "CI passed" isn't sufficient, and how to close the loop locally</li>
+    <li>Pre-deploy verification checklist (build → boot → infra-config validity)</li>
+    <li>Expand/contract migration pattern, with a do's/don'ts table</li>
+    <li>Feature-flag lifecycle: develop → deploy → validate → release → contract</li>
+    <li>Test isolation — a worked ETS cross-contamination root-cause example</li>
+    <li>Root cause vs. workarounds, with a concrete anti-pattern list</li>
+  </ul>
+  <a class="open" href="production-delivery-principles.html">Open guide →</a>
+</section>
+
 <!-- ARCHITECTURE -->
 <section class="card" id="architecture">
   <h2><span class="icon">▸</span> How it's built</h2>
@@ -184,12 +224,14 @@
     ├── <span class="file">typescript-cheatsheet.html</span>
     ├── <span class="file">curl-cheatsheet.html</span>
     ├── <span class="file">ffmpeg-cheatsheet.html</span>
+    ├── <span class="file">caddy-docker-proxy-cheatsheet.html</span>
+    ├── <span class="file">production-delivery-principles.html</span>
     ├── <span class="file">styles.css</span>              <span class="com">← shared Rose Pine, responsive grid, burger menu</span>
     └── <span class="file">app.js</span>                  <span class="com">← shared drawer toggle</span></pre>
 
   <ul>
     <li>Each cheatsheet links <code class="inline">styles.css</code> and <code class="inline">app.js</code> (same directory)</li>
-    <li>Only file-specific syntax-token colours stay inline (TS uses gold / iris / foam; curl uses love / gold / foam; ffmpeg uses pine / gold / foam / iris / rose — overlapping class names so they have to remain per-file)</li>
+    <li>Only file-specific syntax-token colours stay inline (each page picks its own subset of the eight Rose Pine roles — overlapping class names so they have to remain per-file)</li>
     <li>Responsive 1 / 2 / 3-col grid driven by <code class="inline">@media</code> at 760 px and 1200 px</li>
     <li><code class="inline">max-width: min(2400px, 96vw)</code> lets cards fill ultrawide monitors without absurd line lengths</li>
     <li>Mobile (&lt; 760 px) gets a hamburger drawer with full ARIA states, scroll lock, Escape-to-close, viewport-resize auto-dismiss</li>
@@ -282,6 +324,45 @@
   </ul>
 </section>
 
+<!-- CADDY RESOURCES -->
+<section class="card" id="resources-caddy">
+  <h2><span class="icon">▸</span> Further reading — Caddy</h2>
+  <ul class="res-list">
+    <li>
+      <a href="https://github.com/lucaslorentz/caddy-docker-proxy" target="_blank" rel="noopener">caddy-docker-proxy</a>
+      <span class="src">github.com</span>
+      <span class="desc">The plugin this whole cheatsheet is about — label syntax reference, full README, issue tracker for edge cases.</span>
+    </li>
+    <li>
+      <a href="https://caddyserver.com/docs/" target="_blank" rel="noopener">Caddy documentation</a>
+      <span class="src">caddyserver.com</span>
+      <span class="desc">The underlying reverse proxy / TLS engine. <code class="inline">reverse_proxy</code>'s full directive reference (health checks, load-balancing policies) lives here.</span>
+    </li>
+    <li>
+      <a href="https://github.com/caddyserver/xcaddy" target="_blank" rel="noopener">xcaddy</a>
+      <span class="src">github.com</span>
+      <span class="desc">Builds custom Caddy binaries with extra plugins — how the DNS-01 challenge module gets added to the base image.</span>
+    </li>
+  </ul>
+</section>
+
+<!-- PRINCIPLES RESOURCES -->
+<section class="card" id="resources-principles">
+  <h2><span class="icon">▸</span> Further reading — Delivery Principles</h2>
+  <ul class="res-list">
+    <li>
+      <a href="https://trunkbaseddevelopment.com/" target="_blank" rel="noopener">Trunk-based development</a>
+      <span class="src">trunkbaseddevelopment.com</span>
+      <span class="desc">The branching model shift-left CI and small, frequent deploys both assume.</span>
+    </li>
+    <li>
+      <a href="https://martinfowler.com/articles/feature-toggles.html" target="_blank" rel="noopener">Feature Toggles (Martin Fowler)</a>
+      <span class="src">martinfowler.com</span>
+      <span class="desc">The canonical write-up on flag categories and lifecycle — the develop → deploy → validate → release → contract stages in this guide are one concrete instance of it.</span>
+    </li>
+  </ul>
+</section>
+
 <!-- TOOLS -->
 <section class="card" id="tools">
   <h2><span class="icon">▸</span> Tools &amp; sandboxes</h2>
@@ -315,7 +396,7 @@
   <ul>
     <li><strong>Theme:</strong> <a class="inline-docs" href="https://rosepinetheme.com" target="_blank" rel="noopener">Rose Pine</a> — palette by Emilia Dunfelt &amp; contributors. Used in its "Main" variant with the standard role mapping (love, gold, rose, pine, foam, iris).</li>
     <li><strong>Fonts:</strong> system UI sans for prose; JetBrains Mono / Fira Code / SF Mono / Menlo for code blocks.</li>
-    <li><strong>Validation:</strong> each cheatsheet was checked with Python's <code class="inline">html.parser</code> for unclosed tags. The ffmpeg/ffprobe cheatsheet's commands were additionally run against a real local ffmpeg build (Apple Silicon) rather than authored from memory — subtitle burn-in/<code class="inline">drawtext</code> (unsupported by this build), RTMP push/<code class="inline">fswatch</code> (no live endpoint or tool on hand), and NVENC/VAAPI (no matching GPU) are the exceptions, sourced from official docs and labeled documentation-only in that page.</li>
+    <li><strong>Validation:</strong> each cheatsheet was checked with Python's <code class="inline">html.parser</code> for unclosed tags. The ffmpeg/ffprobe cheatsheet's commands were additionally run against a real local ffmpeg build (Apple Silicon) rather than authored from memory — subtitle burn-in/<code class="inline">drawtext</code> (unsupported by this build), RTMP push/<code class="inline">fswatch</code> (no live endpoint or tool on hand), and NVENC/VAAPI (no matching GPU) are the exceptions, sourced from official docs and labeled documentation-only in that page. The Caddy Docker Proxy and Production Delivery Principles guides are drawn directly from a real deployed multi-app setup's current Dockerfile, compose files, Caddyfile, and cutover script — not authored from memory — with hostnames and repo paths genericized for publication.</li>
   </ul>
 
   <div class="note new">Looking for the JS event-loop deep-dives? They're in the <a class="inline-docs" href="event-loop-index.html">event-loop series index</a> — three sequential explainers on the call stack / microtask / macrotask interplay and migrating from <code class="inline">.then</code> chains to <code class="inline">await</code>.</div>
@@ -329,7 +410,9 @@
   <strong style="color:var(--gold)">Cheatsheets:</strong>
   <a href="typescript-cheatsheet.html">TypeScript</a> ·
   <a href="curl-cheatsheet.html">curl</a> ·
-  <a href="ffmpeg-cheatsheet.html">ffmpeg / ffprobe</a>
+  <a href="ffmpeg-cheatsheet.html">ffmpeg / ffprobe</a> ·
+  <a href="caddy-docker-proxy-cheatsheet.html">Caddy Docker Proxy</a> ·
+  <a href="production-delivery-principles.html">Delivery Principles</a>
   &nbsp;|&nbsp;
   <a href="event-loop-index.html">→ Event-loop series index</a>
 </footer>
