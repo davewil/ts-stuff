@@ -381,6 +381,25 @@ window.TOPICS = [
     tags: ["virt", "hypervisor", "zfs"]
   },
   {
+    id: "proxmox-mcp-gpu",
+    domain: "homelab",
+    title: "Proxmox MCP + APU GPU-ML",
+    ext: "sh",
+    description: "An MCP control plane for Proxmox, the LXC tooling fix it needed, power-cut auto-recovery, and running local ML on a Radeon 680M iGPU (Vulkan + ROCm) without resetting the host.",
+    status: "reference",
+    updated: "2026-07",
+    href: "cheatsheets/proxmox-mcp-gpu-cheatsheet.html",
+    subLinks: [
+      { label: "Proxmox MCP & GPU-ML cheatsheet (6 sections)", href: "cheatsheets/proxmox-mcp-gpu-cheatsheet.html" }
+    ],
+    external: [
+      { label: "mcp-proxmox (upstream)", href: "https://github.com/bsahane/mcp-proxmox" },
+      { label: "llama.cpp", href: "https://github.com/ggml-org/llama.cpp" },
+      { label: "Proxmox VE docs", href: "https://pve.proxmox.com/pve-docs/" }
+    ],
+    tags: ["proxmox", "gpu", "rocm", "vulkan", "mcp"]
+  },
+  {
     id: "private-cloud",
     domain: "homelab",
     title: "Private Cloud Stack",

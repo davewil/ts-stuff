@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proxmox MCP &amp; AMD-APU GPU-ML — Cheatsheet</title>
+<script>(function(){try{var t=(JSON.parse(localStorage.getItem("docs-hub:tweaks")||"{}")||{}).theme;if(t==="moon"||t==="dawn"||t==="main"){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
+<link rel="stylesheet" href="styles.css?v=6">
+<style>
+  /* shell / config syntax token colors */
+  pre .cmd     { color: var(--pine); font-weight: 600; }
+  pre .flag    { color: var(--gold); }
+  pre .path    { color: var(--foam); }
+  pre .str     { color: var(--foam); }
+  pre .env     { color: var(--rose); }
+  pre .comment { color: var(--muted); font-style: italic; }
+  pre .op      { color: var(--subtle); }
+  pre .ok      { color: var(--pine); font-weight: 600; }
+  pre .no      { color: var(--love); font-weight: 600; }
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to content</a>
+<nav class="back-link">
+  <a href="/">← All notes</a>
+  <div class="theme-switch" role="radiogroup" aria-label="Theme">
+    <button type="button" data-theme="main">Main</button>
+    <button type="button" data-theme="moon">Moon</button>
+    <button type="button" data-theme="dawn">Dawn</button>
+  </div>
+</nav>
+
+<header>
+  <h1>Proxmox MCP <span class="accent">&amp; AMD-APU GPU-ML</span></h1>
+  <p>Driving Proxmox from an MCP control plane, fixing its LXC tooling, hardening a mini-PC against power cuts, and running local ML on a Radeon 680M iGPU without resetting the host — Rose Pine theme</p>
+</header>
+
+<button class="burger" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="toc">☰</button>
+<div class="nav-backdrop" aria-hidden="true"></div>
+
+<nav class="toc" id="toc">
+  <a href="#control-plane">MCP control plane</a>
+  <a href="#lxc-bug">The LXC 400 bug</a>
+  <a href="#auto-recovery">Power-cut auto-recovery</a>
+  <a href="#gpu-backends">GPU backends: Vulkan vs ROCm</a>
+  <a href="#docker-in-lxc">Docker-in-LXC GPU recipe</a>
+  <a href="#workload-fit">iGPU workload fit</a>
+</nav>
+
+<main id="main">
+<div class="grid">
+
+<!-- MCP CONTROL PLANE -->
+<section class="card" id="control-plane">
+  <h2><span class="icon">▸</span> MCP control plane</h2>
+
+  <p>A Python stdio MCP server (<a href="https://github.com/bsahane/mcp-proxmox">bsahane/mcp-proxmox</a>) exposing 40+ Proxmox tools, registered at user scope so it loads in every session.</p>
+
+  <h3>The load_dotenv cwd trap</h3>
+  <div class="note"><strong>Gotcha:</strong> the server calls <code class="inline">load_dotenv()</code> with no path, which only finds <code class="inline">.env</code> when the process's working directory <em>is</em> the repo. An MCP client spawns servers from an arbitrary cwd, so the token silently never loads and every call fails auth. Verified: <code class="inline">find_dotenv()</code> returns <code class="inline">''</code> from any foreign cwd.</div>
+
+  <h3>Fix — a cwd-pinning wrapper</h3>
+<pre><span class="comment">#!/usr/bin/env bash  — run.sh</span>
+<span class="cmd">cd</span> <span class="str">"$(dirname "$0")"</span> <span class="op">||</span> <span class="cmd">exit</span> <span class="str">1</span>
+<span class="cmd">exec</span> <span class="path">.venv/bin/proxmox-mcp</span></pre>
+<pre><span class="cmd">claude</span> mcp add <span class="flag">-s</span> <span class="str">user</span> proxmox-mcp <span class="op">--</span> <span class="path">~/dev/mcp-proxmox/run.sh</span></pre>
+
+  <div class="note"><strong>Why it works:</strong> the MCP handshake is stdio — <strong>stdout is a protocol channel</strong>. The wrapper keeps it a single <code class="inline">exec</code>'d process, and the server writes logs to stderr only, so the JSON-RPC stream stays clean regardless of who launches it.</div>
+</section>
+
+<!-- LXC BUG -->
+<section class="card" id="lxc-bug">
+  <h2><span class="icon">▸</span> The LXC 400 bug</h2>
+
+  <p>Every LXC-targeted tool — list, info, start, stop — returned <code class="inline">400 Bad Request</code>. One root cause, four call sites.</p>
+
+  <p>The client resolved a container's node with <code class="inline">/cluster/resources?type=lxc</code>. Proxmox's <code class="inline">type</code> only accepts <code class="inline">vm · storage · node · sdn</code> — <strong>containers come back under <code class="inline">type=vm</code></strong>, distinguished by a per-entry <code class="inline">type</code> field.</p>
+
+  <table>
+    <tr><th>&nbsp;</th><th>Query</th><th>Outcome</th></tr>
+    <tr><td><strong>Before</strong></td><td><code class="inline">resources.get(type="lxc")</code></td><td>invalid enum → HTTP 400</td></tr>
+    <tr><td><strong>After</strong></td><td><code class="inline">[r for r in get(type="vm") if r["type"]=="lxc"]</code></td><td>valid query, then filter</td></tr>
+  </table>
+
+  <div class="note"><strong>Fix symmetrically.</strong> Both resolvers get the guard: the LXC resolver keeps <code class="inline">type=="lxc"</code>, the VM resolver keeps <code class="inline">type=="qemu"</code> — so a VM tool now correctly rejects an LXC id instead of mis-dispatching it to the wrong endpoint.</div>
+</section>
+
+<!-- AUTO-RECOVERY -->
+<section class="card" id="auto-recovery">
+  <h2><span class="icon">▸</span> Power-cut auto-recovery</h2>
+
+  <p>A stopped guest coming back after an outage is a three-layer chain — and only the bottom layer is reachable over the API.</p>
+
+  <table>
+    <tr><th>Layer</th><th>What it does</th><th>Where</th></tr>
+    <tr><td><strong>1 · BIOS</strong></td><td>Box powers on when mains returns (<code class="inline">AC Power Loss → Always On</code>)</td><td>console / BIOS</td></tr>
+    <tr><td><strong>2 · Host</strong></td><td>Proxmox boots + starts guest-autostart</td><td>console</td></tr>
+    <tr><td><strong>3 · Guest</strong></td><td><code class="inline">onboot=1</code> + startup ordering</td><td>API ✓</td></tr>
+  </table>
+
+  <h3>Layer 3 — DNS leads, in order</h3>
+<pre><span class="cmd">pct</span> set <span class="str">103</span> <span class="flag">--onboot</span> <span class="str">1</span> <span class="flag">--startup</span> <span class="str">order=1,up=15</span>  <span class="comment"># pihole: DNS first, then a 15s beat</span>
+<span class="cmd">pct</span> set <span class="str">100</span> <span class="flag">--onboot</span> <span class="str">1</span> <span class="flag">--startup</span> <span class="str">order=2</span>       <span class="comment"># docker-host: after DNS is answering</span></pre>
+
+  <div class="note"><strong>Caveat:</strong> layer 3 only helps once the box is already powered and booted. A genuine outage still needs the two physical BIOS/console toggles — they can't be flipped over the network, and on a headless mini-PC they need a borrowed screen once. Shutdown runs in reverse order, so DNS stays up while workloads drain.</div>
+</section>
+
+<!-- GPU BACKENDS -->
+<section class="card" id="gpu-backends">
+  <h2><span class="icon">▸</span> GPU backends: Vulkan vs ROCm</h2>
+
+  <p>An AMD APU that used to hard-<em>reset</em> under GPU ML on a bare-metal desktop install. The question was never "is the GPU broken" — it was "what was colliding."</p>
+
+  <div class="note"><strong>Root cause:</strong> the resets were <strong>ROCm compute and a Wayland compositor (Hyprland) contending for the same shared iGPU</strong> — two subsystems fighting over one GPU. Headless Proxmox removes the compositor half, so the collision structurally can't recur.</div>
+
+  <h3>Both backends, measured (Radeon 680M, gfx1035)</h3>
+  <table>
+    <tr><th>Backend</th><th>Setup</th><th>Result</th><th>Prefill</th><th>Decode</th></tr>
+    <tr><td><strong>Vulkan</strong></td><td><code class="inline">/dev/dri</code> · <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a> · RADV</td><td>stable, 5-min soak</td><td>1061 t/s</td><td>54 t/s</td></tr>
+    <tr><td><strong>ROCm</strong></td><td><code class="inline">/dev/kfd</code> · PyTorch · gfx1030 override</td><td>stable, 500 matmuls</td><td colspan="2">~1.7 TFLOP/s FP32</td></tr>
+    <tr><td>CPU baseline</td><td>Zen3+ · 8 cores</td><td>reference</td><td>415 t/s</td><td>46 t/s</td></tr>
+  </table>
+
+  <div class="note"><strong>Read the split:</strong> <strong>prefill is compute-bound → GPU wins 2.56×</strong>; decode is memory-bandwidth-bound and this is a <strong>UMA</strong> part (iGPU + CPU share LPDDR5, no matrix cores) → only ~1.2×. Default to <strong>Vulkan</strong> (simplest — <code class="inline">/dev/dri</code> only, no override); reach for ROCm only when you need the PyTorch/HIP ecosystem.</div>
+</section>
+
+<!-- DOCKER-IN-LXC -->
+<section class="card" id="docker-in-lxc">
+  <h2><span class="icon">▸</span> Docker-in-LXC GPU recipe</h2>
+
+  <p>Running a ROCm container inside a privileged Proxmox LXC needs every one of these, or it fails in a different place each time.</p>
+
+  <h3>Container config (<code class="inline">/etc/pve/lxc/&lt;id&gt;.conf</code>)</h3>
+<pre><span class="env">features</span><span class="op">:</span> <span class="str">nesting=1</span>
+<span class="env">lxc.apparmor.profile</span><span class="op">:</span> <span class="str">unconfined</span>       <span class="comment"># else runc: error mounting "proc" ... permission denied</span>
+<span class="env">lxc.cgroup2.devices.allow</span><span class="op">:</span> <span class="str">c 234:* rwm</span>  <span class="comment"># /dev/kfd  (ROCm compute)</span>
+<span class="env">lxc.cgroup2.devices.allow</span><span class="op">:</span> <span class="str">c 226:* rwm</span>  <span class="comment"># /dev/dri  (render)</span>
+<span class="env">lxc.cgroup2.devices.allow</span><span class="op">:</span> <span class="str">c 10:229 rwm</span> <span class="comment"># /dev/fuse (storage driver)</span></pre>
+
+  <div class="note"><strong>Storage driver is the trap:</strong> native <code class="inline">overlay2</code> is blocked in LXC (<code class="inline">mount overlay: permission denied</code>), and the default <code class="inline">vfs</code> has <strong>no copy-on-write</strong> — it ballooned a 30 GB image to 140 GB and filled the disk. Fix: <code class="inline">fuse-overlayfs</code> via <code class="inline">/etc/docker/daemon.json</code>.</div>
+
+  <h3>Run it</h3>
+<pre><span class="cmd">docker</span> run <span class="flag">--rm</span> <span class="flag">--device</span> <span class="path">/dev/kfd</span> <span class="flag">--device</span> <span class="path">/dev/dri</span> <span class="op">\</span>
+  <span class="flag">--security-opt</span> <span class="str">seccomp=unconfined</span> <span class="flag">--group-add</span> <span class="str">video</span> <span class="op">\</span>
+  <span class="flag">-e</span> <span class="env">HSA_OVERRIDE_GFX_VERSION</span><span class="op">=</span><span class="str">10.3.0</span> <span class="path">rocm/pytorch:latest</span> <span class="op">...</span></pre>
+
+  <div class="note"><strong>The override is a masquerade.</strong> <code class="inline">HSA_OVERRIDE_GFX_VERSION=10.3.0</code> runs gfx1030-tuned kernels on gfx1035. Core tensor ops (rocBLAS matmul) are proven; validate exotic kernels (some conv/attention/fused ops) per workload.</div>
+</section>
+
+<!-- WORKLOAD FIT -->
+<section class="card" id="workload-fit">
+  <h2><span class="icon">▸</span> iGPU workload fit</h2>
+
+  <p>A real but modest accelerator: ~1.7 TFLOP/s, UMA, no matrix cores. Fit the workload to the hardware.</p>
+
+  <table>
+    <tr><th>Verdict</th><th>Workloads</th><th>Why</th></tr>
+    <tr><td><strong>Do it on GPU</strong></td><td>LLM inference · embeddings/RAG · Whisper · DL-OCR · vision-LLM doc/receipt parsing</td><td>Inference &amp; prefill-bound — where the 2.5× lands</td></tr>
+    <tr><td><strong>Temper it</strong></td><td>Small-model LoRA fine-tuning · Stable Diffusion</td><td>Runs on ROCm, but slow — tinkering, not volume</td></tr>
+    <tr><td><strong>Stay CPU / offload</strong></td><td>Training at scale · high-throughput serving</td><td>Bandwidth-bound; UMA starves where dedicated VRAM would help</td></tr>
+  </table>
+
+  <div class="note"><strong>Two guardrails:</strong> run GPU jobs <strong>containerised and headless</strong> (never beside a compositor again), and remember <strong>Tesseract is CPU-only</strong> — no GPU benefit. For receipt/doc OCR the GPU-friendly path is a vision-LLM via Vulkan, where the image becomes a big prompt (prefill-heavy).</div>
+</section>
+
+</div>
+</main>
+
+<footer>
+  Proxmox MCP &amp; AMD-APU GPU-ML cheatsheet · Rose Pine theme · palette from <a href="https://rosepinetheme.com">rosepinetheme.com</a> · all figures measured on a Beelink SER5 MAX (Ryzen 7 6800U / Radeon 680M, PVE 9.1.6) · <a href="https://pve.proxmox.com/pve-docs/">Proxmox VE docs</a> are the authoritative reference
+</footer>
+
+<script src="wallpaper-engine.js?v=4"></script>
+<script src="app.js?v=4"></script>
+<script src="tweaks.js?v=4"></script>
+
+</body>
+</html>

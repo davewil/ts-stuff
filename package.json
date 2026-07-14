@@ -1,7 +1,13 @@
 {
-  "name": "node-ts-test",
+  "name": "ts-stuff",
   "version": "0.0.0",
   "private": true,
+  "description": "Regulated multi-tenant Node/TS backend test bed and the source of docs.davewil.dev",
+  "homepage": "https://docs.davewil.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davewil/ts-stuff.git"
+  },
   "type": "module",
   "packageManager": "pnpm@11.0.8",
   "engines": {
